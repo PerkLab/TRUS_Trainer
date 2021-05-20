@@ -44,7 +44,7 @@ class MainWidgetEventFilter(qt.QWidget):
 
   def eventFilter(self, object, event):
 
-    if not self.moduleWidget.getSlicerInterfaceVisible():
+    if self.moduleWidget.getSlicerInterfaceVisible():
       return False
 
     if event.type() == qt.QEvent.Close:
@@ -98,7 +98,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     print(toggled)
 
   def getSlicerInterfaceVisible(self):
-    return self.ui.customUIButton.checked
+    return not self.ui.customUIButton.checked
 
   def setSlicerInterfaceVisible(self, visible):
 
@@ -167,28 +167,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     ProbeTipToProbe = slicer.mrmlScene.GetFirstNodeByName("ProbeTipToProbe")
     ProbeModelToProbeTip = slicer.mrmlScene.GetFirstNodeByName("ProbeModelToProbeTip")
 
-    # ReferenceToRAS =  slicer.mrmlScene.GetFirstNodeByName("ReferenceToRAS")
-    # ProbeToReference =  slicer.mrmlScene.GetFirstNodeByName(self.PROBE_TO_REFERENCE)
-    # SliceToImage =  slicer.mrmlScene.GetFirstNodeByName("SliceToImage")
-    # ProbeModelToProbe =  slicer.mrmlScene.GetFirstNodeByName(self.PROBEMODEL_TO_PROBE)
-    # RotatedToProbeModel = slicer.mrmlScene.GetFirstNodeByName(self.ROTATED_TO_PROBEMODEL)
-    # ImageToProbe = slicer.mrmlScene.GetFirstNodeByName(self.IMAGE_TO_PROBE)
-
-    # if RotatedToProbeModel is None:
-    #   RotatedToProbeModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.ROTATED_TO_PROBEMODEL)
-    # if ProbeModelToProbe is None:
-    #   ProbeModelToProbe = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.PROBEMODEL_TO_PROBE)
-    # if SliceToImage is None:
-    #   SliceToImage = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "SliceToImage")
-    # if ReferenceToRAS is None:
-    #   ReferenceToRAS = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "ReferenceToRAS")
-    # if ProbeToReference is None:
-    #   ProbeToReference = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.PROBE_TO_REFERENCE)
-    # if ImageToProbe is None:
-    #   ImageToProbe = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.IMAGE_TO_PROBE)
-
     # Create hierarchy for phantom visualization
-    print("\n\n -------- \n\n" + str(TRUSVolume))
     TRUSVolume.SetAndObserveTransformNodeID(TRUSToCylinder.GetID())
     zoneNode.SetAndObserveTransformNodeID(TRUSToCylinder.GetID())
     CylinderModel.SetAndObserveTransformNodeID(CylinderToBox.GetID())
