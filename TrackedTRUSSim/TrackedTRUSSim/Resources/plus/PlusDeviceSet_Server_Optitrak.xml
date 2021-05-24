@@ -1,0 +1,47 @@
+<PlusConfiguration version="2.8">
+  <DataCollection StartupDelaySec="1.0">
+    <DeviceSet
+      Name="PlusServer: OptiTrack (Profile only)"
+      Description="Broadcasting tracking data through OpenIGTLink."
+    />
+    <Device
+      Id="TrackerDevice"
+      Type="OptiTrack"
+      ToolReferenceFrame="Tracker" 
+      Profile="TRUS_Probe_Profile.motive"
+      AttachToRunningMotive="FALSE"
+      MotiveDataDescriptionsUpdateTimeSec="1.0" >
+      <DataSources>
+        <DataSource Type="Tool" Id="Probe" />
+        <DataSource Type="Tool" Id="Phantom" />
+		<DataSource Type="Tool" Id="Pointer" />
+      </DataSources>
+      <OutputChannels>
+        <OutputChannel Id="TrackerStream">
+			<DataSource Type="Tool" Id="Probe" />
+			<DataSource Type="Tool" Id="Phantom" />
+			<DataSource Type="Tool" Id="Pointer" />
+        </OutputChannel>
+      </OutputChannels>
+    </Device>
+  </DataCollection>
+  <PlusOpenIGTLinkServer
+    MaxNumberOfIgtlMessagesToSend="1"
+    MaxTimeSpentWithProcessingMs="50"
+    ListeningPort="18944"
+    SendValidTransformsOnly="TRUE"
+    OutputChannelId="TrackerStream" >
+    <DefaultClientInfo>
+      <MessageTypes>
+        <Message Type="TRANSFORM" />
+      </MessageTypes>
+      <TransformNames>
+        <Transform Name="ProbeToTracker" />
+        <Transform Name="PhantomToTracker" />
+        <Transform Name="ProbeToPhantom" />
+        <Transform Name="PointerToPhantom" />
+      </TransformNames>
+    </DefaultClientInfo>
+  </PlusOpenIGTLinkServer>
+  
+</PlusConfiguration>
