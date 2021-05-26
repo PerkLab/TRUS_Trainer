@@ -85,8 +85,16 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.layout.addWidget(uiWidget)
     self.ui = slicer.util.childWidgetVariables(uiWidget)
 
+    #Set scene in MRML widgets
+    uiWidget.setMRMLScene(slicer.mrmlScene)
+
+    #Create logic class
+    self.logic = TrackedTRUSSimLogic()
+    self.logic.setup()
+
+
     #Connect UI
-    self.ui.patientComboBox.currentIndexChanged.connect(self.make_scene)
+    self.ui.patientComboBox.currentIndexChanged.connect(self.onPatientComboBoxChanged)
     self.ui.customUIButton.connect('toggled(bool)', self.onCustomUIToggled)   
     # self.ui.Zones.connect('toggled(bool)', self.showZones)
 
@@ -110,81 +118,54 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     slicer.util.setStatusBarVisible(visible)
     slicer.util.setMenuBarsVisible(visible)
 
-  def make_scene(self):
+  def onPatientComboBoxChanged(self):
 
-    # set up slicer scene
-    slicer.mrmlScene.Clear()
+    # get current patient
     patient = self.ui.patientComboBox.currentIndex
 
-    #Load the scene for the current patient
-    scene = self.resourcePath('scene'+ str(patient) + '.mrb')
-    slicer.util.loadScene(scene)
+    # load the appropriate transforms
+    self.logic.setupPatient(patient)
 
-    TRUSVolume = slicer.mrmlScene.GetFirstNodeByName("TRUS")
-    ProbeModel = slicer.mrmlScene.GetFirstNodeByName("USProbe")
-    BoxModel = slicer.mrmlScene.GetFirstNodeByName("BoxModel")
-    CylinderModel = slicer.mrmlScene.GetFirstNodeByName("CylinderModel")
-    zoneNode = slicer.mrmlScene.GetFirstNodeByName("Segmentation")
-    self.splitSliceViewer()  # get the yellow slice
+#
+# TrackedTRUSSimLogic
+#
 
-    #load TRUS
-    if TRUSVolume is None:
-      US_path = self.resourcePath('registered_zones/Patient_' + str(patient) + '/TRUS.nrrd')
-      TRUSVolume = slicer.util.loadVolume(US_path)
-      print(TRUSVolume)
-    #load probe
-    if ProbeModel is None:
-      probe_path = self.resourcePath('ProbeModel.stl')
-      ProbeModel = slicer.util.loadModel(probe_path)
-    #load zone segmentation
-    if zoneNode is None:
-      zone_path = self.resourcePath('registered_zones/Patient_' + str(patient) + '/Zones.seg.nrrd')
-      zoneNode = slicer.util.loadLabelVolume(zone_path)
-    #load box model
-    if BoxModel is None:
-      box_path = self.resourcePath('BoxModel.vtk')
-      BoxModel = slicer.util.loadModel(box_path)
-    # load cylinder model
-    if CylinderModel is None:
-      cylinder_path = self.resourcePath('CylinderModel.vtk')
-      CylinderModel = slicer.util.loadModel(cylinder_path)
+class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
+  """This class should implement all the actual
+  computation done by your module.  The interface
+  should be such that other python code can import
+  this class and make use of the functionality without
+  requiring an instance of the Widget.
+  Uses ScriptedLoadableModuleLogic base class, available at:
+  https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
+  """
 
-    #Setup segmentation
-    labelmapVolumeNode = zoneNode
-    seg = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSegmentationNode')
-    slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolumeNode, seg)
-    seg.CreateClosedSurfaceRepresentation()
-    slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
-    segDisplay = seg.GetDisplayNode()
-    segDisplay.SetVisibility(False)
+  # Transform names
 
-    # create and name all transforms
-    BoxModelToRAS = slicer.mrmlScene.GetFirstNodeByName("BoxModelToRAS")
-    CylinderToBox = slicer.mrmlScene.GetFirstNodeByName("CylinderToBox")
-    TRUSToCylinder = slicer.mrmlScene.GetFirstNodeByName("TRUSToCylinder")
-    PhantomToBoxModel = slicer.mrmlScene.GetFirstNodeByName("PhantomToBoxModel")
-    ProbeToPhantom = slicer.mrmlScene.GetFirstNodeByName("ProbeToPhantom")
-    ProbeTipToProbe = slicer.mrmlScene.GetFirstNodeByName("ProbeTipToProbe")
-    ProbeModelToProbeTip = slicer.mrmlScene.GetFirstNodeByName("ProbeModelToProbeTip")
+  REFERENCE_TO_RAS = "ReferenceToRAS"
+  BOXMODEL_TO_REFERENCE = "BoxModelToReference"
+  CYLINDER_TO_BOX = "CylinderToBox"
+  TRUS_TO_CYLINDER = "TRUSToCylinder"
+  PHANTOM_TO_BOXMODEL = "PhantomToBoxModel"
+  PROBE_TO_PHANTOM = "ProbeToPhantom"
+  PROBETIP_TO_PROBE = "ProbeTipToProbe"
+  PROBEMODEL_TO_PROBETIP = "ProbeModelToProbeTip"
 
-    # Create hierarchy for phantom visualization
-    TRUSVolume.SetAndObserveTransformNodeID(TRUSToCylinder.GetID())
-    zoneNode.SetAndObserveTransformNodeID(TRUSToCylinder.GetID())
-    CylinderModel.SetAndObserveTransformNodeID(CylinderToBox.GetID())
-    TRUSToCylinder.SetAndObserveTransformNodeID(CylinderToBox.GetID())
-    BoxModel.SetAndObserveTransformNodeID(BoxModelToRAS.GetID())
-    CylinderToBox.SetAndObserveTransformNodeID(BoxModelToRAS.GetID())
+  #Model names
 
-    #Create hierarchy for probe visualization
-    ProbeModel.SetAndObserveTransformNodeID(ProbeModelToProbeTip.GetID())
-    ProbeModelToProbeTip.SetAndObserveTransformNodeID(ProbeTipToProbe.GetID())
-    ProbeTipToProbe.SetAndObserveTransformNodeID(ProbeToPhantom.GetID())
-    ProbeToPhantom.SetAndObserveTransformNodeID(PhantomToBoxModel.GetID())
+  PROBE_MODEL = "ProbeModel"
+  BOX_MODEL = "BoxModel"
+  CYLINDER_MODEL = "CylinderModel"
+  TRUS_VOLUME = "TRUSVolume"
+  ZONE_SEGMENTATION = "ZoneSegmentation"
 
-    # Clean up extra camera nodes
-    for i in range(3):
-      camera = slicer.mrmlScene.GetFirstNodeByClass('vtkMRMLCameraNode')
-      slicer.mrmlScene.RemoveNode(camera)
+
+  def __init__(self):
+    """
+    Called when the logic class is instantiated. Can be used for initializing member variables.
+    """
+    ScriptedLoadableModuleLogic.__init__(self)
+
 
   #custom layout to show 3D view and yellow slice
   def splitSliceViewer(self):
@@ -217,31 +198,159 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     layoutManager.setLayout(customLayoutId)
 
 
-
-#
-# TrackedTRUSSimLogic
-#
-
-class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
-  """This class should implement all the actual
-  computation done by your module.  The interface
-  should be such that other python code can import
-  this class and make use of the functionality without
-  requiring an instance of the Widget.
-  Uses ScriptedLoadableModuleLogic base class, available at:
-  https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
-  """
-
-  def __init__(self):
+  def setup(self):
     """
-    Called when the logic class is instantiated. Can be used for initializing member variables.
+    Setup the slicer scene.
     """
-    ScriptedLoadableModuleLogic.__init__(self)
 
+    #Get the current directory
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+
+    self.setupTransformHierarchy()
+    self.splitSliceViewer()
+
+    #Get the parameter node
+    parameterNode = self.getParameterNode()
+
+    #Create models
+
+    boxModel = parameterNode.GetNodeReference(self.BOX_MODEL)
+    boxModelPath = os.path.join(moduleDir, "Resources", "models", "BoxModel.vtk")
+    if boxModel is None:
+      boxModel =  slicer.util.loadModel(boxModelPath)
+      boxModel.SetName(self.BOX_MODEL)
+      parameterNode.SetNodeReferenceID(self.BOX_MODEL, boxModel.GetID())
+
+    boxModelToReference = parameterNode.GetNodeReference(self.BOXMODEL_TO_REFERENCE)
+    boxModel.SetAndObserveTransformNodeID(boxModelToReference.GetID())
+
+    cylinderModel = parameterNode.GetNodeReference(self.CYLINDER_MODEL)
+    cylinderModelPath = os.path.join(moduleDir, "Resources", "models", "CylinderModel.vtk")
+    if cylinderModel is None:
+      cylinderModel =  slicer.util.loadModel(cylinderModelPath)
+      cylinderModel.SetName(self.CYLINDER_MODEL)
+      parameterNode.SetNodeReferenceID(self.CYLINDER_MODEL, cylinderModel.GetID())
+
+    cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
+    cylinderModel.SetAndObserveTransformNodeID(cylinderToBox.GetID())
+
+    probeModel = parameterNode.GetNodeReference(self.PROBE_MODEL)
+    probeModelPath = os.path.join(moduleDir, "Resources", "models", "ProbeModel.stl")
+    if probeModel is None:
+      probeModel =  slicer.util.loadModel(probeModelPath)
+      probeModel.SetName(self.PROBE_MODEL)
+      parameterNode.SetNodeReferenceID(self.PROBE_MODEL, probeModel.GetID())
+
+    probeToBox = parameterNode.GetNodeReference(self.PROBEMODEL_TO_PROBETIP)
+    probeModel.SetAndObserveTransformNodeID(probeToBox.GetID())
+
+  def setupTransformHierarchy(self):
+    """
+    Setup the transform nodes in the scene in if they don't exist yet
+    """
+
+    parameterNode = self.getParameterNode()
+
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+
+    referenceToRas = parameterNode.GetNodeReference(self.REFERENCE_TO_RAS)
+    if referenceToRas is None:
+      referenceToRas = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.REFERENCE_TO_RAS)
+      parameterNode.SetNodeReferenceID(self.REFERENCE_TO_RAS, referenceToRas.GetID())
+
+    boxModelToReference = parameterNode.GetNodeReference(self.BOXMODEL_TO_REFERENCE)
+    if boxModelToReference is None:
+      boxModelToReferencePath = os.path.join(moduleDir, "Resources", "transforms", "BoxModelToReference.h5")
+      boxModelToReference = slicer.util.loadTransform(boxModelToReferencePath)
+      parameterNode.SetNodeReferenceID(self.BOXMODEL_TO_REFERENCE, boxModelToReference.GetID())
+    boxModelToReference.SetAndObserveTransformNodeID(referenceToRas.GetID())
+
+    cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
+    if cylinderToBox is None:
+      cylinderToBoxPath = os.path.join(moduleDir, "Resources", "transforms", "CylinderToBox.h5")
+      cylinderToBox = slicer.util.loadTransform(cylinderToBoxPath)
+      parameterNode.SetNodeReferenceID(self.CYLINDER_TO_BOX, cylinderToBox.GetID())
+    cylinderToBox.SetAndObserveTransformNodeID(boxModelToReference.GetID())
+
+    phantomToBoxModel = parameterNode.GetNodeReference(self.PHANTOM_TO_BOXMODEL)
+    if phantomToBoxModel is None:
+      phantomToBoxModelPath = os.path.join(moduleDir, "Resources", "transforms", "PhantomToBoxModel.h5")
+      phantomToBoxModel = slicer.util.loadTransform(phantomToBoxModelPath)
+      parameterNode.SetNodeReferenceID(self.PHANTOM_TO_BOXMODEL, phantomToBoxModel.GetID())
+    phantomToBoxModel.SetAndObserveTransformNodeID(referenceToRas.GetID())
+
+    probeToPhantom = parameterNode.GetNodeReference(self.PROBE_TO_PHANTOM)
+    if probeToPhantom is None:
+      probeToPhantomPath = os.path.join(moduleDir, "Resources", "transforms", "ProbeToPhantom.h5")
+      probeToPhantom = slicer.util.loadTransform(probeToPhantomPath)
+      parameterNode.SetNodeReferenceID(self.PROBE_TO_PHANTOM, probeToPhantom.GetID())
+    probeToPhantom.SetAndObserveTransformNodeID(phantomToBoxModel.GetID())
+
+    probeTipToProbe = parameterNode.GetNodeReference(self.PROBETIP_TO_PROBE)
+    if probeTipToProbe is None:
+      probeTipToProbePath = os.path.join(moduleDir, "Resources", "transforms", "ProbeTipToProbe.h5")
+      probeTipToProbe = slicer.util.loadTransform(probeTipToProbePath)
+      parameterNode.SetNodeReferenceID(self.PROBETIP_TO_PROBE, probeTipToProbe.GetID())
+    probeTipToProbe.SetAndObserveTransformNodeID(probeToPhantom.GetID())
+
+    probeModelToProbeTip = parameterNode.GetNodeReference(self.PROBEMODEL_TO_PROBETIP)
+    if probeModelToProbeTip is None:
+      probeModelToProbeTipPath = os.path.join(moduleDir, "Resources", "transforms", "ProbeModelToProbeTip.h5")
+      probeModelToProbeTip = slicer.util.loadTransform(probeModelToProbeTipPath)
+      parameterNode.SetNodeReferenceID(self.PROBEMODEL_TO_PROBETIP, probeModelToProbeTip.GetID())
+    probeModelToProbeTip.SetAndObserveTransformNodeID(probeTipToProbe.GetID())
+
+  def setupPatient(self, patient):
+
+    parameterNode = self.getParameterNode()
+
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+
+    #Load TRUSToCylinder transform
+    trusToCylinder = parameterNode.GetNodeReference(self.TRUS_TO_CYLINDER)
+    if trusToCylinder != None:
+      slicer.mrmlScene.RemoveNode(trusToCylinder)
+    trusToCylinderPath = os.path.join(moduleDir, "Resources", 'registered_zones', 'Patient_' + str(patient), 'TRUSToCylinder.h5')
+    trusToCylinder = slicer.util.loadTransform(trusToCylinderPath)
+    parameterNode.SetNodeReferenceID(self.TRUS_TO_CYLINDER, trusToCylinder.GetID())
+
+    #Add TRUSToCylinder into hierarchy
+    cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
+    trusToCylinder.SetAndObserveTransformNodeID(cylinderToBox.GetID())
+
+    #Load the TRUS model
+    trusVolume = parameterNode.GetNodeReference(self.TRUS_VOLUME)
+    if trusVolume != None:
+      slicer.mrmlScene.RemoveNode(trusVolume)
+    trusPath = os.path.join(moduleDir, "Resources", "registered_zones", "Patient_" + str(patient), "TRUS.nrrd")
+    trusVolume = slicer.util.loadVolume(trusPath)
+    parameterNode.SetNodeReferenceID(self.TRUS_VOLUME, trusVolume.GetID())
+
+    trusVolume.SetAndObserveTransformNodeID(trusToCylinder.GetID())
+
+    #load zone segmentation
+    seg = parameterNode.GetNodeReference(self.ZONE_SEGMENTATION)
+    if seg != None:
+      slicer.mrmlScene.RemoveNode(seg)
+    zone_path = os.path.join(moduleDir, "Resources", 'registered_zones', 'Patient_' + str(patient), 'Zones.seg.nrrd')
+    zoneNode = slicer.util.loadLabelVolume(zone_path)
+    parameterNode.SetNodeReferenceID(self.ZONE_SEGMENTATION, zoneNode.GetID())
+
+    #Setup segmentation
+    labelmapVolumeNode = zoneNode
+    seg = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSegmentationNode', self.ZONE_SEGMENTATION)
+    slicer.modules.segmentations.logic().ImportLabelmapToSegmentationNode(labelmapVolumeNode, seg)
+    seg.CreateClosedSurfaceRepresentation()
+    slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
+    segDisplay = seg.GetDisplayNode()
+    segDisplay.SetVisibility(False)
+
+    seg.SetAndObserveTransformNodeID(trusToCylinder.GetID())
 
 #
 # TrackedTRUSSimTest
 #
+
 
 class TrackedTRUSSimTest(ScriptedLoadableModuleTest):
   """
