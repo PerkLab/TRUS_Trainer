@@ -159,6 +159,12 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   TRUS_VOLUME = "TRUSVolume"
   ZONE_SEGMENTATION = "ZoneSegmentation"
 
+  #OpenIGTLink PLUS connection
+  CONFIG_FILE = "PlusDeviceSet_Server_Optitrak.xml"
+  CONFIG_TEXT_NODE = "ConfigTextNode"
+  PLUS_SERVER_NODE = "PlusServer"
+  PLUS_SERVER_LAUNCHER_NODE = "PlusServerLauncher"
+
 
   def __init__(self):
     """
@@ -208,6 +214,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     self.setupTransformHierarchy()
     self.splitSliceViewer()
+    self.setupResliceDriver()
+    self.setupPlusServer()
 
     #Get the parameter node
     parameterNode = self.getParameterNode()
@@ -243,6 +251,20 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     probeToBox = parameterNode.GetNodeReference(self.PROBEMODEL_TO_PROBETIP)
     probeModel.SetAndObserveTransformNodeID(probeToBox.GetID())
+
+  def setupResliceDriver(self):
+    """
+    Drive yellow slice based on position of pointer tip
+    """
+    #Get the reslice logic class and yellow slice node
+    resliceLogic = slicer.modules.volumereslicedriver.logic()
+    sliceNode = slicer.app.layoutManager().sliceWidget("Yellow").mrmlSliceNode()
+
+    #Set the probe tip as the driver and set the mode to sagittal
+    resliceLogic.SetDriverForSlice(self.PROBETIP_TO_PROBE, sliceNode)
+    resliceLogic.SetModeForSlice(resliceLogic.MODE_SAGITTAL, sliceNode)
+
+    # resliceLogic.SetDriverForSlice()
 
   def setupTransformHierarchy(self):
     """
@@ -346,6 +368,43 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     segDisplay.SetVisibility(False)
 
     seg.SetAndObserveTransformNodeID(trusToCylinder.GetID())
+
+  def setupPlusServer(self):
+    """
+    Creates PLUS server and OpenIGTLink connection if it doesn't exist already.
+    """
+    parameterNode = self.getParameterNode()
+
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+    configFullpath = os.path.join(moduleDir, "Resources", "plus", self.CONFIG_FILE)
+
+    configTextNode = parameterNode.GetNodeReference(self.CONFIG_TEXT_NODE)
+    if configTextNode is None:
+      configTextNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTextNode", self.CONFIG_TEXT_NODE)
+      configTextNode.SaveWithSceneOff()                                                             #What does this do?
+      configTextNode.SetForceCreateStorageNode(slicer.vtkMRMLTextNode.CreateStorageNodeAlways)
+      parameterNode.SetNodeReferenceID(self.CONFIG_TEXT_NODE, configTextNode.GetID())
+    if not configTextNode.GetStorageNode():
+      configTextNode.AddDefaultStorageNode()
+    configTextStorageNode = configTextNode.GetStorageNode()
+    configTextStorageNode.SaveWithSceneOff()
+    configTextStorageNode.SetFileName(configFullpath)
+    configTextStorageNode.ReadData(configTextNode)
+
+    plusServerNode = parameterNode.GetNodeReference(self.PLUS_SERVER_NODE)
+    if not plusServerNode:
+      plusServerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlusServerNode", self.PLUS_SERVER_NODE)
+      plusServerNode.SaveWithSceneOff()
+      parameterNode.SetNodeReferenceID(self.PLUS_SERVER_NODE, plusServerNode.GetID())
+    plusServerNode.SetAndObserveConfigNode(configTextNode)
+
+    plusServerLauncherNode = parameterNode.GetNodeReference(self.PLUS_SERVER_LAUNCHER_NODE)
+    if not plusServerLauncherNode:
+      plusServerLauncherNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLPlusServerLauncherNode", self.PLUS_SERVER_LAUNCHER_NODE)
+      plusServerLauncherNode.SaveWithSceneOff()
+
+    if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
+      plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
 
 #
 # TrackedTRUSSimTest
