@@ -26,37 +26,37 @@
         </item>
         <item>
          <property name="text">
-          <string>Patient 1</string>
+          <string>Case 1</string>
          </property>
         </item>
         <item>
          <property name="text">
-          <string>Patient 2</string>
+          <string>Case 2</string>
          </property>
         </item>
         <item>
          <property name="text">
-          <string>Patient 3</string>
+          <string>Case 3</string>
          </property>
         </item>
         <item>
          <property name="text">
-          <string>Patient 4</string>
+          <string>Case 4</string>
          </property>
         </item>
         <item>
          <property name="text">
-          <string>Patient 5</string>
+          <string>Case 5</string>
          </property>
         </item>
         <item>
          <property name="text">
-          <string>Patient 6</string>
+          <string>Case 6</string>
          </property>
         </item>
         <item>
          <property name="text">
-          <string>Patient 7</string>
+          <string>Case 7</string>
          </property>
         </item>
        </widget>
@@ -64,7 +64,7 @@
       <item row="0" column="0">
        <widget class="QLabel" name="label">
         <property name="text">
-         <string>TRUS volume</string>
+         <string>Case Volume</string>
         </property>
        </widget>
       </item>
@@ -110,11 +110,15 @@
    <item>
     <widget class="ctkCollapsibleButton" name="CollapsibleButton">
      <property name="text">
-      <string>Biopsy Locations</string>
+      <string>Biopsy</string>
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_3">
       <item>
-       <widget class="qSlicerSimpleMarkupsWidget" name="BiopsyMarkupsWidget"/>
+       <widget class="QPushButton" name="fireBiopsyButton">
+        <property name="text">
+         <string>Fire Biopsy Needle</string>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>
@@ -175,17 +179,6 @@
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>qSlicerWidget</class>
-   <extends>QWidget</extends>
-   <header>qSlicerWidget.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>qSlicerSimpleMarkupsWidget</class>
-   <extends>qSlicerWidget</extends>
-   <header>qSlicerSimpleMarkupsWidget.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

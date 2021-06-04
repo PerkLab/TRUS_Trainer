@@ -5,6 +5,10 @@ import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
+import ScreenCapture
+import numpy as np
+from vtk.util.numpy_support import vtk_to_numpy
+from Resources.Utils import GenerateFanMask
 #
 # TrackedTRUSSim
 #
@@ -92,10 +96,10 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic = TrackedTRUSSimLogic()
     self.logic.setup()
 
-
     #Connect UI
     self.ui.patientComboBox.currentIndexChanged.connect(self.onPatientComboBoxChanged)
-    self.ui.customUIButton.connect('toggled(bool)', self.onCustomUIToggled)   
+    self.ui.customUIButton.connect('toggled(bool)', self.onCustomUIToggled)
+    self.ui.fireBiopsyButton.connect('clicked(bool)', self.onFireBiopsyClicked)
     # self.ui.Zones.connect('toggled(bool)', self.showZones)
 
     self.eventFilter = MainWidgetEventFilter(self)
@@ -126,6 +130,11 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # load the appropriate transforms
     self.logic.setupPatient(patient)
 
+  def onFireBiopsyClicked(self):
+
+    self.logic.fireBiopsyNeedle()
+
+
 #
 # TrackedTRUSSimLogic
 #
@@ -149,6 +158,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   PROBE_TO_PHANTOM = "ProbeToPhantom"
   PROBETIP_TO_PROBE = "ProbeTipToProbe"
   PROBEMODEL_TO_PROBETIP = "ProbeModelToProbeTip"
+  PROBETIP_TO_USMASK = "ProbeTipToUSMask"
 
   #PLUS related transforms
   POINTER_TO_PHANTOM = "PointerToPhantom"
@@ -160,6 +170,10 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   CYLINDER_MODEL = "CylinderModel"
   TRUS_VOLUME = "TRUSVolume"
   ZONE_SEGMENTATION = "ZoneSegmentation"
+  BIOPSY_MODEL = "BiopsyModel"
+
+  #Volume names
+  MASK_VOLUME = "MaskVolume"
 
   #OpenIGTLink PLUS connection
   CONFIG_FILE = "PlusDeviceSet_Server_Optitrak.xml"
@@ -186,7 +200,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
        </view>
       </item>
       <item>
-       <view class="vtkMRMLSliceNode" singletontag="Yellow">
+       <view class="vtkMRMLSliceNode" singletontag="Red">
         <property name="orientation" action="default">Saggital</property>
         <property name="viewlabel" action="default">Y</property>
         <property name="viewcolor" action="default">#EDD54C</property>
@@ -206,6 +220,55 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     layoutManager.setLayout(customLayoutId)
 
 
+  def maskSlice(self):
+
+    #Use screencap module logic to get slice view
+    screenCapLogic = ScreenCapture.ScreenCaptureLogic()
+    view = screenCapLogic.viewFromNode(slicer.util.getNode('vtkMRMLSliceNodeRed'))
+    view.forceRender()
+
+    #Apply vtkWindowToImageFilter
+    rw = view.renderWindow()
+    wti = vtk.vtkWindowToImageFilter()
+
+    wti.SetInput(rw)
+    wti.Update()
+
+    capturedImage = wti.GetOutput()
+    cols, rows, _ = capturedImage.GetDimensions()
+    print("columns: " + str(cols))
+    print("rows: " + str(rows))
+    sc = capturedImage.GetPointData().GetScalars()
+    npImage = vtk_to_numpy(sc)
+    npImage = npImage.reshape(rows, cols, -1)
+    npImage = np.flipud(npImage)
+
+    cv2.imshow("MASK", mask_int)
+    cv2.imwrite("C:\\repos\\TRUS_Trainer\\TrackedTRUSSim\\TrackedTRUSSim\\Resources\\Utils\\US_Mask.png", mask)
+
+    npImage[~mask] = [0,0,0]
+
+    cv2.imshow("TEST", npImage)
+
+
+  def fireBiopsyNeedle(self):
+
+    #Get the parameter node
+    parameterNode = self.getParameterNode()
+
+    #Access the create model module
+    createModelsLogic = slicer.modules.createmodels.logic()
+
+    #Create models
+    biopsyModel = parameterNode.GetNodeReference(self.BIOPSY_MODEL)
+    if biopsyModel is None:
+      biopsyModel = createModelsLogic.CreateCylinder(15, 0.5)
+      biopsyModel.GetDisplayNode().SetColor(0.33, 1.0, 1.0)
+      biopsyModel.SetName(self.BIOPSY_MODEL)
+      biopsyModel.GetDisplayNode().SliceIntersectionVisibilityOn()
+      parameterNode.SetNodeReferenceID(self.BIOPSY_MODEL, biopsyModel.GetID())
+
+
   def setup(self):
     """
     Setup the slicer scene.
@@ -216,7 +279,6 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     self.setupTransformHierarchy()
     self.splitSliceViewer()
-    self.setupResliceDriver()
     self.setupPlusServer()
 
     #Get the parameter node
@@ -254,17 +316,36 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     probeToBox = parameterNode.GetNodeReference(self.PROBEMODEL_TO_PROBETIP)
     probeModel.SetAndObserveTransformNodeID(probeToBox.GetID())
 
+    USMaskVolume = parameterNode.GetNodeReference(self.MASK_VOLUME)
+    USMaskVolumePath = os.path.join(moduleDir, "Resources", "models", "USMask.png")
+    if USMaskVolume is None:
+      USMaskVolume =  slicer.util.loadVolume(USMaskVolumePath)
+      USMaskVolume.SetName(self.MASK_VOLUME)
+      parameterNode.SetNodeReferenceID(self.MASK_VOLUME, USMaskVolume.GetID())
+
+    probeTipToUSMask = parameterNode.GetNodeReference(self.PROBETIP_TO_USMASK)
+    USMaskVolume.SetAndObserveTransformNodeID(probeTipToUSMask.GetID())
+
+    #Get the US Mask display node
+    usDispNode = USMaskVolume.GetDisplayNode()
+    usDispNode.SetLowerThreshold(10)
+    usDispNode.SetUpperThreshold(600)
+
+
   def setupResliceDriver(self):
     """
     Drive yellow slice based on position of pointer tip
     """
+    parameterNode = self.getParameterNode()
+
     #Get the reslice logic class and yellow slice node
     resliceLogic = slicer.modules.volumereslicedriver.logic()
-    sliceNode = slicer.app.layoutManager().sliceWidget("Yellow").mrmlSliceNode()
+    sliceNode = slicer.app.layoutManager().sliceWidget("Red").mrmlSliceNode()
 
-    #Set the probe tip as the driver and set the mode to sagittal
-    resliceLogic.SetDriverForSlice(self.PROBETIP_TO_PROBE, sliceNode)
-    resliceLogic.SetModeForSlice(resliceLogic.MODE_SAGITTAL, sliceNode)
+    #Set the mask as the driver and set the mode to transverse
+    usMaskVolume = parameterNode.GetNodeReference(self.MASK_VOLUME)
+    resliceLogic.SetDriverForSlice(usMaskVolume.GetID(), sliceNode)
+    resliceLogic.SetModeForSlice(resliceLogic.MODE_TRANSVERSE, sliceNode)
 
     # resliceLogic.SetDriverForSlice()
 
@@ -324,6 +405,13 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       parameterNode.SetNodeReferenceID(self.PROBEMODEL_TO_PROBETIP, probeModelToProbeTip.GetID())
     probeModelToProbeTip.SetAndObserveTransformNodeID(probeTipToProbe.GetID())
 
+    probeTipToUSMask = parameterNode.GetNodeReference(self.PROBETIP_TO_USMASK)
+    if probeTipToUSMask is None:
+      probeTipToUSMaskPath = os.path.join(moduleDir, "Resources", "transforms", "ProbeTipToUSMask.h5")
+      probeTipToUSMask = slicer.util.loadTransform(probeTipToUSMaskPath)
+      parameterNode.SetNodeReferenceID(self.PROBETIP_TO_USMASK, probeTipToUSMask.GetID())
+    probeTipToUSMask.SetAndObserveTransformNodeID(probeModelToProbeTip.GetID())
+
     #Add the transforms that are generated by the PLUS config file
     pointerToPhantom = parameterNode.GetNodeReference(self.POINTER_TO_PHANTOM)
     if pointerToPhantom is None:
@@ -358,7 +446,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
     trusToCylinder.SetAndObserveTransformNodeID(cylinderToBox.GetID())
 
-    #Load the TRUS model
+    #Load the TRUS volume
     trusVolume = parameterNode.GetNodeReference(self.TRUS_VOLUME)
     if trusVolume != None:
       slicer.mrmlScene.RemoveNode(trusVolume)
@@ -387,6 +475,32 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     parameterNode.SetNodeReferenceID(self.ZONE_SEGMENTATION, seg.GetID())
 
     seg.SetAndObserveTransformNodeID(trusToCylinder.GetID())
+
+    #Set the foreground and background of the red slice
+    layoutManager = slicer.app.layoutManager()
+    compositeNode = layoutManager.sliceWidget("Red").sliceLogic().GetSliceCompositeNode()
+    usMaskVolume = parameterNode.GetNodeReference(self.MASK_VOLUME)
+    compositeNode.SetBackgroundVolumeID(usMaskVolume.GetID())
+    compositeNode.SetForegroundVolumeID(trusVolume.GetID())
+
+    #Set the opacity to strictly show the foreground
+    compositeNode.SetForegroundOpacity(1)
+
+    self.setupResliceDriver()
+
+    #Get the US Mask display node
+    usMaskVolume = parameterNode.GetNodeReference(self.MASK_VOLUME)
+    usDispNode = usMaskVolume.GetDisplayNode()
+
+    #Apply a threshold that gets rid of the US fan but keeps the outline
+    usDispNode.ApplyThresholdOn()
+    usDispNode.SetLowerThreshold(10)
+    usDispNode.SetUpperThreshold(600)
+
+    #Recenter the red slice on the new content
+    layoutManager.sliceWidget("Red").sliceLogic().FitSliceToAll()
+
+
 
   def setupPlusServer(self):
     """
