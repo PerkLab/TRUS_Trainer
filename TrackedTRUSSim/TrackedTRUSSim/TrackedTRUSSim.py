@@ -98,6 +98,8 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     #Connect UI
     self.ui.patientComboBox.currentIndexChanged.connect(self.onPatientComboBoxChanged)
+    self.ui.biopsyDepthSlider.connect('sliderMoved(double)', self.onMoveBiopsy)
+    self.ui.biopsyDepthSlider.connect('sliderReleased()', self.onMoveBiopsy)
     self.ui.customUIButton.connect('toggled(bool)', self.onCustomUIToggled)
     self.ui.fireBiopsyButton.connect('clicked(bool)', self.onFireBiopsyClicked)
     # self.ui.Zones.connect('toggled(bool)', self.showZones)
@@ -130,9 +132,20 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # load the appropriate transforms
     self.logic.setupPatient(patient)
 
+  def onMoveBiopsy(self):
+
+    print("in onMoveBiopsy")
+
+    #Get the current location of the slider
+    sliderVal = self.ui.biopsyDepthSlider.value
+
+    self.logic.moveBiopsy(sliderVal)
+
   def onFireBiopsyClicked(self):
 
     self.logic.fireBiopsyNeedle()
+
+    self.ui.biopsyDepthSlider.value = 0
 
 
 #
@@ -158,7 +171,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   PROBE_TO_PHANTOM = "ProbeToPhantom"
   PROBETIP_TO_PROBE = "ProbeTipToProbe"
   PROBEMODEL_TO_PROBETIP = "ProbeModelToProbeTip"
-  PROBETIP_TO_USMASK = "ProbeTipToUSMask"
+  USMASK_TO_PROBEMODEL = "USMaskToProbeModel"
+  BIOPSYMODEL_TO_PROBEMODEL = "BiopsyModelToProbeModel"
 
   #PLUS related transforms
   POINTER_TO_PHANTOM = "PointerToPhantom"
@@ -251,22 +265,44 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     cv2.imshow("TEST", npImage)
 
 
+  def moveBiopsy(self, biopsyDepth):
+
+    #Get the parameter node and transform node
+    parameterNode = self.getParameterNode()
+    biopsyModelToProbeModel = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_PROBEMODEL)
+
+    #Get the raw transform
+    rawTransform = biopsyModelToProbeModel.GetMatrixTransformToParent()
+
+    rawTransform.SetElement(2, 3, 269 + biopsyDepth)
+
+    biopsyModelToProbeModel.SetMatrixTransformToParent(rawTransform)
+
+
   def fireBiopsyNeedle(self):
+    '''
+    When the biopsy needle is fired, the following occurs:
+    1. The current value of the BiopsyNeedleToProbeModel transform is saved.
+    2. The BiopsyNeedleToProbeModel transform, biopsy model and slider are moved back
+        to their default locations.
+    3. A label updated indicating that the biopsy was taken.
+    '''
 
     #Get the parameter node
     parameterNode = self.getParameterNode()
 
-    #Access the create model module
-    createModelsLogic = slicer.modules.createmodels.logic()
+    #Get relevant models / transforms
+    biopsyModelToProbeModel = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_PROBEMODEL)
 
-    #Create models
-    biopsyModel = parameterNode.GetNodeReference(self.BIOPSY_MODEL)
-    if biopsyModel is None:
-      biopsyModel = createModelsLogic.CreateCylinder(15, 0.5)
-      biopsyModel.GetDisplayNode().SetColor(0.33, 1.0, 1.0)
-      biopsyModel.SetName(self.BIOPSY_MODEL)
-      biopsyModel.GetDisplayNode().SliceIntersectionVisibilityOn()
-      parameterNode.SetNodeReferenceID(self.BIOPSY_MODEL, biopsyModel.GetID())
+    #Save the value of the transform
+    transformCopy = biopsyModelToProbeModel.GetMatrixTransformToParent()
+
+
+
+    #Reset the value of biopsyModelToProbeModel after saving it
+    self.moveBiopsy(0)
+
+
 
 
   def setup(self):
@@ -323,14 +359,27 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       USMaskVolume.SetName(self.MASK_VOLUME)
       parameterNode.SetNodeReferenceID(self.MASK_VOLUME, USMaskVolume.GetID())
 
-    probeTipToUSMask = parameterNode.GetNodeReference(self.PROBETIP_TO_USMASK)
-    USMaskVolume.SetAndObserveTransformNodeID(probeTipToUSMask.GetID())
+    USMaskToProbeModel = parameterNode.GetNodeReference(self.USMASK_TO_PROBEMODEL)
+    USMaskVolume.SetAndObserveTransformNodeID(USMaskToProbeModel.GetID())
 
     #Get the US Mask display node
     usDispNode = USMaskVolume.GetDisplayNode()
     usDispNode.SetLowerThreshold(10)
     usDispNode.SetUpperThreshold(600)
 
+    biopsyModel = parameterNode.GetNodeReference(self.BIOPSY_MODEL)
+    biopsyModelPath = os.path.join(moduleDir, "Resources", "models", "BiopsyModel.vtk")
+    if biopsyModel is None:
+      biopsyModel =  slicer.util.loadModel(biopsyModelPath)
+      biopsyModel.SetName(self.BIOPSY_MODEL)
+      parameterNode.SetNodeReferenceID(self.BIOPSY_MODEL, biopsyModel.GetID())
+
+    biopsyModelToProbeModel = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_PROBEMODEL)
+    biopsyModel.SetAndObserveTransformNodeID(biopsyModelToProbeModel.GetID())
+
+    #Show the intersection between the biopsy and the red slice
+    biopsyDispNode = biopsyModel.GetDisplayNode()
+    biopsyDispNode.SliceIntersectionVisibilityOn()
 
   def setupResliceDriver(self):
     """
@@ -405,12 +454,19 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       parameterNode.SetNodeReferenceID(self.PROBEMODEL_TO_PROBETIP, probeModelToProbeTip.GetID())
     probeModelToProbeTip.SetAndObserveTransformNodeID(probeTipToProbe.GetID())
 
-    probeTipToUSMask = parameterNode.GetNodeReference(self.PROBETIP_TO_USMASK)
-    if probeTipToUSMask is None:
-      probeTipToUSMaskPath = os.path.join(moduleDir, "Resources", "transforms", "ProbeTipToUSMask.h5")
-      probeTipToUSMask = slicer.util.loadTransform(probeTipToUSMaskPath)
-      parameterNode.SetNodeReferenceID(self.PROBETIP_TO_USMASK, probeTipToUSMask.GetID())
-    probeTipToUSMask.SetAndObserveTransformNodeID(probeModelToProbeTip.GetID())
+    USMaskToProbeModel = parameterNode.GetNodeReference(self.USMASK_TO_PROBEMODEL)
+    if USMaskToProbeModel is None:
+      USMaskToProbeModelPath = os.path.join(moduleDir, "Resources", "transforms", "USMaskToProbeModel.h5")
+      USMaskToProbeModel = slicer.util.loadTransform(USMaskToProbeModelPath)
+      parameterNode.SetNodeReferenceID(self.USMASK_TO_PROBEMODEL, USMaskToProbeModel.GetID())
+    USMaskToProbeModel.SetAndObserveTransformNodeID(probeModelToProbeTip.GetID())
+
+    BiopsyModelToProbeModel = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_PROBEMODEL)
+    if BiopsyModelToProbeModel is None:
+      BiopsyModelToProbeModelPath = os.path.join(moduleDir, "Resources", "transforms", "BiopsyModelToProbeModel.h5")
+      BiopsyModelToProbeModel = slicer.util.loadTransform(BiopsyModelToProbeModelPath)
+      parameterNode.SetNodeReferenceID(self.BIOPSYMODEL_TO_PROBEMODEL, BiopsyModelToProbeModel.GetID())
+    BiopsyModelToProbeModel.SetAndObserveTransformNodeID(probeModelToProbeTip.GetID())
 
     #Add the transforms that are generated by the PLUS config file
     pointerToPhantom = parameterNode.GetNodeReference(self.POINTER_TO_PHANTOM)
@@ -494,12 +550,11 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     #Apply a threshold that gets rid of the US fan but keeps the outline
     usDispNode.ApplyThresholdOn()
-    usDispNode.SetLowerThreshold(10)
+    usDispNode.SetLowerThreshold(50)
     usDispNode.SetUpperThreshold(600)
 
     #Recenter the red slice on the new content
     layoutManager.sliceWidget("Red").sliceLogic().FitSliceToAll()
-
 
 
   def setupPlusServer(self):
