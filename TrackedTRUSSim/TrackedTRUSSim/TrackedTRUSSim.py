@@ -1,3 +1,4 @@
+import json
 import os
 import unittest
 import logging
@@ -99,7 +100,6 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #Connect UI
     self.ui.patientComboBox.currentIndexChanged.connect(self.onPatientComboBoxChanged)
     self.ui.biopsyDepthSlider.connect('sliderMoved(double)', self.onMoveBiopsy)
-    self.ui.biopsyDepthSlider.connect('sliderReleased()', self.onMoveBiopsy)
     self.ui.customUIButton.connect('toggled(bool)', self.onCustomUIToggled)
     self.ui.fireBiopsyButton.connect('clicked(bool)', self.onFireBiopsyClicked)
     # self.ui.Zones.connect('toggled(bool)', self.showZones)
@@ -133,8 +133,6 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.setupPatient(patient)
 
   def onMoveBiopsy(self):
-
-    print("in onMoveBiopsy")
 
     #Get the current location of the slider
     sliderVal = self.ui.biopsyDepthSlider.value
@@ -194,6 +192,9 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   CONFIG_TEXT_NODE = "ConfigTextNode"
   PLUS_SERVER_NODE = "PlusServer"
   PLUS_SERVER_LAUNCHER_NODE = "PlusServerLauncher"
+
+  #Various other node names
+  BIOPSY_TRANSFORM_ROLES = "BiopsyTransformRoles"
 
 
   def __init__(self):
@@ -278,6 +279,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     biopsyModelToProbeModel.SetMatrixTransformToParent(rawTransform)
 
+    # transformStr = str(slicer.util.arrayFromTransformMatrix(biopsyModelToProbeModel))
+
 
   def fireBiopsyNeedle(self):
     '''
@@ -293,16 +296,33 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     #Get relevant models / transforms
     biopsyModelToProbeModel = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_PROBEMODEL)
+    biopsyTransformRolesNode = parameterNode.GetParameter(self.BIOPSY_TRANSFORM_ROLES)
 
-    #Save the value of the transform
+    print(str(biopsyTransformRolesNode))
+
+    #Load all previous biopsy names
+    biopsyTransformRoles = []
+    if biopsyTransformRolesNode is not '':
+      biopsyTransformRoles = json.loads(biopsyTransformRolesNode)
+
+    #Name the current one
+    currBiopsyRole = "btr_" + str(len(biopsyTransformRoles))
+
+    #Get a copy of the current biopsy transform
     transformCopy = biopsyModelToProbeModel.GetMatrixTransformToParent()
 
+    #Add a duplicate transform to the scene
+    biopsyTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", currBiopsyRole)
+    biopsyTransformNode.SetMatrixTransformToParent(transformCopy)
+    parameterNode.SetNodeReferenceID(currBiopsyRole, biopsyTransformNode.GetID())
 
+    #Update the list of transform IDs
+    biopsyTransformRoles = biopsyTransformRoles + [currBiopsyRole]
+    biopsyTransformRoles = json.dumps(biopsyTransformRoles)
+    parameterNode.SetParameter(self.BIOPSY_TRANSFORM_ROLES, biopsyTransformRoles)
 
     #Reset the value of biopsyModelToProbeModel after saving it
     self.moveBiopsy(0)
-
-
 
 
   def setup(self):
@@ -331,6 +351,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     boxModelToReference = parameterNode.GetNodeReference(self.BOXMODEL_TO_REFERENCE)
     boxModel.SetAndObserveTransformNodeID(boxModelToReference.GetID())
+    boxModel.GetDisplayNode().SetOpacity(0.5)
+    boxModel.GetDisplayNode().SetColor(0,0,1)
 
     cylinderModel = parameterNode.GetNodeReference(self.CYLINDER_MODEL)
     cylinderModelPath = os.path.join(moduleDir, "Resources", "models", "CylinderModel.vtk")
@@ -341,6 +363,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
     cylinderModel.SetAndObserveTransformNodeID(cylinderToBox.GetID())
+    cylinderModel.GetDisplayNode().SetOpacity(0.5)
+    boxModel.GetDisplayNode().SetColor(0,0,1)
 
     probeModel = parameterNode.GetNodeReference(self.PROBE_MODEL)
     probeModelPath = os.path.join(moduleDir, "Resources", "models", "ProbeModel.stl")
