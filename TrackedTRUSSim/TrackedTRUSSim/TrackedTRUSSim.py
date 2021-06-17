@@ -14,6 +14,10 @@ from Resources.Utils import GenerateFanMask
 # TrackedTRUSSim
 #
 
+#TODO
+#Change to cylinders to 1cm or 5mm in mask
+
+
 class TrackedTRUSSim(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
@@ -99,7 +103,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     #Connect UI
     self.ui.patientComboBox.currentIndexChanged.connect(self.onPatientComboBoxChanged)
-    self.ui.biopsyDepthSlider.connect('sliderMoved(double)', self.onMoveBiopsy)
+    self.ui.biopsyDepthSlider.connect('valueChanged(double)', self.onMoveBiopsy)
     self.ui.customUIButton.connect('toggled(bool)', self.onCustomUIToggled)
     self.ui.fireBiopsyButton.connect('clicked(bool)', self.onFireBiopsyClicked)
     # self.ui.Zones.connect('toggled(bool)', self.showZones)
@@ -107,9 +111,22 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.eventFilter = MainWidgetEventFilter(self)
     slicer.util.mainWindow().installEventFilter(self.eventFilter)
 
+    #Ensure that all biopsies currently in the parameter node are being shown
+    self.logic.visualizeBiopsies()
+
   def onCustomUIToggled(self, toggled):
+
     self.setSlicerInterfaceVisible(not toggled)
-    print(toggled)
+
+    if toggled:
+      styleFile = self.resourcePath("TrackedTRUSSim.qss")
+      f = qt.QFile(styleFile)
+      f.open(qt.QFile.ReadOnly | qt.QFile.Text)
+      ts = qt.QTextStream(f)
+      stylesheet = ts.readAll()
+      slicer.util.mainWindow().setStyleSheet(stylesheet)
+    else:
+      slicer.util.mainWindow().setStyleSheet("")
 
   def getSlicerInterfaceVisible(self):
     return not self.ui.customUIButton.checked
@@ -136,6 +153,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     #Get the current location of the slider
     sliderVal = self.ui.biopsyDepthSlider.value
+    print("Slider value: " + str(sliderVal))
 
     self.logic.moveBiopsy(sliderVal)
 
@@ -170,7 +188,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   PROBETIP_TO_PROBE = "ProbeTipToProbe"
   PROBEMODEL_TO_PROBETIP = "ProbeModelToProbeTip"
   USMASK_TO_PROBEMODEL = "USMaskToProbeModel"
-  BIOPSYMODEL_TO_PROBEMODEL = "BiopsyModelToProbeModel"
+  BIOPSYTRAJECTORY_TO_PROBEMODEL = "BiopsyTrajectoryToProbeModel"
+  BIOPSYMODEL_TO_BIOPSYTRAJECTORY = "BiopsyModelToBiopsyTrajectory"
 
   #PLUS related transforms
   POINTER_TO_PHANTOM = "PointerToPhantom"
@@ -183,6 +202,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   TRUS_VOLUME = "TRUSVolume"
   ZONE_SEGMENTATION = "ZoneSegmentation"
   BIOPSY_MODEL = "BiopsyModel"
+  BIOPSY_TRAJECTORY_MODEL = "BiopsyTrajectoryModel"
 
   #Volume names
   MASK_VOLUME = "MaskVolume"
@@ -270,16 +290,16 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     #Get the parameter node and transform node
     parameterNode = self.getParameterNode()
-    biopsyModelToProbeModel = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_PROBEMODEL)
+    BiopsyModelToBiopsyTrajectory = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_BIOPSYTRAJECTORY)
 
     #Get the raw transform
-    rawTransform = biopsyModelToProbeModel.GetMatrixTransformToParent()
+    rawTransform = BiopsyModelToBiopsyTrajectory.GetMatrixTransformToParent()
 
-    rawTransform.SetElement(2, 3, 269 + biopsyDepth)
+    rawTransform.SetElement(2, 3, biopsyDepth)
 
-    biopsyModelToProbeModel.SetMatrixTransformToParent(rawTransform)
+    BiopsyModelToBiopsyTrajectory.SetMatrixTransformToParent(rawTransform)
 
-    # transformStr = str(slicer.util.arrayFromTransformMatrix(biopsyModelToProbeModel))
+    # transformStr = str(slicer.util.arrayFromTransformMatrix(BiopsyModelToBiopsyTrajectory))
 
 
   def fireBiopsyNeedle(self):
@@ -294,8 +314,10 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     #Get the parameter node
     parameterNode = self.getParameterNode()
 
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+
     #Get relevant models / transforms
-    biopsyModelToProbeModel = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_PROBEMODEL)
+    BiopsyModelToBiopsyTrajectory = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_BIOPSYTRAJECTORY)
     biopsyTransformRolesNode = parameterNode.GetParameter(self.BIOPSY_TRANSFORM_ROLES)
 
     print(str(biopsyTransformRolesNode))
@@ -305,24 +327,88 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     if biopsyTransformRolesNode is not '':
       biopsyTransformRoles = json.loads(biopsyTransformRolesNode)
 
+    print(biopsyTransformRoles)
+
     #Name the current one
-    currBiopsyRole = "btr_" + str(len(biopsyTransformRoles))
+    currBiopsyRole = "BiopsyModelToReference_" + str(len(biopsyTransformRoles))
 
     #Get a copy of the current biopsy transform
-    transformCopy = biopsyModelToProbeModel.GetMatrixTransformToParent()
+    biopsyModelToReferenceTransform = vtk.vtkMatrix4x4()
+    BiopsyModelToBiopsyTrajectory.GetMatrixTransformToWorld(biopsyModelToReferenceTransform)
 
     #Add a duplicate transform to the scene
-    biopsyTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", currBiopsyRole)
-    biopsyTransformNode.SetMatrixTransformToParent(transformCopy)
-    parameterNode.SetNodeReferenceID(currBiopsyRole, biopsyTransformNode.GetID())
+    biopsyModelToReferenceNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", currBiopsyRole)
+    biopsyModelToReferenceNode.SetMatrixTransformToParent(biopsyModelToReferenceTransform)
+    parameterNode.SetNodeReferenceID(currBiopsyRole, biopsyModelToReferenceNode.GetID())
+
+    #Create a biopsy cylinder and add it to the new transform
+    biopsyModelPath = os.path.join(moduleDir, "Resources", "models", "BiopsyModel.vtk")
+    biopsyModel =  slicer.util.loadModel(biopsyModelPath)
+    biopsyModel.SetName("BiopsyModel_" + str(len(biopsyTransformRoles)))
+
+    biopsyModel.SetAndObserveTransformNodeID(biopsyModelToReferenceNode.GetID())
+
+    #Change the colour
+    biopsyDispNode = biopsyModel.GetDisplayNode()
+    biopsyDispNode.SetColor(0,0.5,0)
 
     #Update the list of transform IDs
     biopsyTransformRoles = biopsyTransformRoles + [currBiopsyRole]
     biopsyTransformRoles = json.dumps(biopsyTransformRoles)
     parameterNode.SetParameter(self.BIOPSY_TRANSFORM_ROLES, biopsyTransformRoles)
 
-    #Reset the value of biopsyModelToProbeModel after saving it
+    #Reset the value of BiopsyModelToBiopsyTrajectory after saving it
     self.moveBiopsy(0)
+
+  def visualizeBiopsies(self):
+    '''
+    This method will ensure that all transforms with the name "BiopsyModelToReference_X" are added to
+    BiopsyModelToBiopsyTrajectory, as well as add a biopsy model to any that don't already have one.
+    '''
+
+    #Establish the location of the biopsy model file
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+    biopsyModelPath = os.path.join(moduleDir, "Resources", "models", "BiopsyModel.vtk")
+
+    #Get the parameter node
+    parameterNode = self.getParameterNode()
+
+    #Get parameter containing all the role IDs
+    biopsyTransformRolesNode = parameterNode.GetParameter(self.BIOPSY_TRANSFORM_ROLES)
+
+    print(str(biopsyTransformRolesNode))
+
+    #If there are no biopsy transforms exit the function
+    if biopsyTransformRolesNode is '':
+      return
+
+    #Read the list of biopsy transform roles
+    biopsyTransformRoles = json.loads(biopsyTransformRolesNode)
+
+    #Go through each biopsy transform role
+    for idx, biopsyRole in enumerate(biopsyTransformRoles):
+
+      #Get the transform for each biopsy role
+      biopsyModelToReferenceNode = parameterNode.GetNodeReference(biopsyRole)
+
+      #If the parent node isn't BiopsyModelToBiopsyTrajectory, change it
+      # if biopsyModelToReferenceNode.GetParentTransformNode().GetName() is not "BiopsyModelToBiopsyTrajectory":
+      #   biopsyModelToReferenceNode.SetAndObserveTransformNodeID(BiopsyModelToBiopsyTrajectory.GetID())
+
+      #Check whether the biopsy model already exists
+      biopsyModelName = "BiopsyModel_{}".format(idx)
+
+      if slicer.mrmlScene.GetNodesByName(biopsyModelName).GetNumberOfItems() == 0:
+
+        # Create a biopsy cylinder and add it to the new transform
+        biopsyModel = slicer.util.loadModel(biopsyModelPath)
+        biopsyModel.SetName(biopsyModelName)
+
+        biopsyModel.SetAndObserveTransformNodeID(biopsyModelToReferenceNode.GetID())
+
+        # Change the colour
+        biopsyDispNode = biopsyModel.GetDisplayNode()
+        biopsyDispNode.SetColor(0, 0.5, 0)
 
 
   def setup(self):
@@ -351,7 +437,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     boxModelToReference = parameterNode.GetNodeReference(self.BOXMODEL_TO_REFERENCE)
     boxModel.SetAndObserveTransformNodeID(boxModelToReference.GetID())
-    boxModel.GetDisplayNode().SetOpacity(0.5)
+    boxModel.GetDisplayNode().SetOpacity(0.1)
     boxModel.GetDisplayNode().SetColor(0,0,1)
 
     cylinderModel = parameterNode.GetNodeReference(self.CYLINDER_MODEL)
@@ -363,7 +449,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
     cylinderModel.SetAndObserveTransformNodeID(cylinderToBox.GetID())
-    cylinderModel.GetDisplayNode().SetOpacity(0.5)
+    cylinderModel.GetDisplayNode().SetOpacity(0.1)
     boxModel.GetDisplayNode().SetColor(0,0,1)
 
     probeModel = parameterNode.GetNodeReference(self.PROBE_MODEL)
@@ -391,6 +477,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     usDispNode.SetLowerThreshold(10)
     usDispNode.SetUpperThreshold(600)
 
+    #Load in the biopsy model
     biopsyModel = parameterNode.GetNodeReference(self.BIOPSY_MODEL)
     biopsyModelPath = os.path.join(moduleDir, "Resources", "models", "BiopsyModel.vtk")
     if biopsyModel is None:
@@ -398,12 +485,31 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       biopsyModel.SetName(self.BIOPSY_MODEL)
       parameterNode.SetNodeReferenceID(self.BIOPSY_MODEL, biopsyModel.GetID())
 
-    biopsyModelToProbeModel = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_PROBEMODEL)
-    biopsyModel.SetAndObserveTransformNodeID(biopsyModelToProbeModel.GetID())
+    BiopsyModelToBiopsyTrajectory = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_BIOPSYTRAJECTORY)
+    biopsyModel.SetAndObserveTransformNodeID(BiopsyModelToBiopsyTrajectory.GetID())
 
     #Show the intersection between the biopsy and the red slice
     biopsyDispNode = biopsyModel.GetDisplayNode()
     biopsyDispNode.SliceIntersectionVisibilityOn()
+    biopsyDispNode.SetColor(1,0,0)
+
+    #Load in the biopsy trajectory model
+    biopsyTrajectoryModel = parameterNode.GetNodeReference(self.BIOPSY_TRAJECTORY_MODEL)
+    biopsyTrajectoryModelPath = os.path.join(moduleDir, "Resources", "models", "BiopsyTrajectoryModel.vtk")
+    if biopsyTrajectoryModel is None:
+      biopsyTrajectoryModel =  slicer.util.loadModel(biopsyTrajectoryModelPath)
+      biopsyTrajectoryModel.SetName(self.BIOPSY_TRAJECTORY_MODEL)
+      parameterNode.SetNodeReferenceID(self.BIOPSY_TRAJECTORY_MODEL, biopsyTrajectoryModel.GetID())
+
+    BiopsyTrajectoryToProbeModel = parameterNode.GetNodeReference(self.BIOPSYTRAJECTORY_TO_PROBEMODEL)
+    biopsyTrajectoryModel.SetAndObserveTransformNodeID(BiopsyTrajectoryToProbeModel.GetID())
+
+    #Show the intersection between the biopsy and the red slice
+    biopsyTrajectoryDispNode = biopsyTrajectoryModel.GetDisplayNode()
+    biopsyTrajectoryDispNode.SliceIntersectionVisibilityOn()
+    biopsyTrajectoryDispNode.SetSliceIntersectionOpacity(0.4)
+    biopsyTrajectoryDispNode.SetColor(0,0,1)
+    biopsyTrajectoryDispNode.SetVisibility(False)
 
   def setupResliceDriver(self):
     """
@@ -485,12 +591,19 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       parameterNode.SetNodeReferenceID(self.USMASK_TO_PROBEMODEL, USMaskToProbeModel.GetID())
     USMaskToProbeModel.SetAndObserveTransformNodeID(probeModelToProbeTip.GetID())
 
-    BiopsyModelToProbeModel = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_PROBEMODEL)
-    if BiopsyModelToProbeModel is None:
-      BiopsyModelToProbeModelPath = os.path.join(moduleDir, "Resources", "transforms", "BiopsyModelToProbeModel.h5")
-      BiopsyModelToProbeModel = slicer.util.loadTransform(BiopsyModelToProbeModelPath)
-      parameterNode.SetNodeReferenceID(self.BIOPSYMODEL_TO_PROBEMODEL, BiopsyModelToProbeModel.GetID())
-    BiopsyModelToProbeModel.SetAndObserveTransformNodeID(probeModelToProbeTip.GetID())
+    BiopsyTrajectoryToProbeModel = parameterNode.GetNodeReference(self.BIOPSYTRAJECTORY_TO_PROBEMODEL)
+    if BiopsyTrajectoryToProbeModel is None:
+      BiopsyTrajectoryToProbeModelPath = os.path.join(moduleDir, "Resources", "transforms", "BiopsyTrajectoryToProbeModel.h5")
+      BiopsyTrajectoryToProbeModel = slicer.util.loadTransform(BiopsyTrajectoryToProbeModelPath)
+      parameterNode.SetNodeReferenceID(self.BIOPSYTRAJECTORY_TO_PROBEMODEL, BiopsyTrajectoryToProbeModel.GetID())
+    BiopsyTrajectoryToProbeModel.SetAndObserveTransformNodeID(probeModelToProbeTip.GetID())
+
+    BiopsyModelToBiopsyTrajectory = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_BIOPSYTRAJECTORY)
+    if BiopsyModelToBiopsyTrajectory is None:
+      BiopsyModelToBiopsyTrajectoryPath = os.path.join(moduleDir, "Resources", "transforms", "BiopsyModelToBiopsyTrajectory.h5")
+      BiopsyModelToBiopsyTrajectory = slicer.util.loadTransform(BiopsyModelToBiopsyTrajectoryPath)
+      parameterNode.SetNodeReferenceID(self.BIOPSYMODEL_TO_BIOPSYTRAJECTORY, BiopsyModelToBiopsyTrajectory.GetID())
+    BiopsyModelToBiopsyTrajectory.SetAndObserveTransformNodeID(BiopsyTrajectoryToProbeModel.GetID())
 
     #Add the transforms that are generated by the PLUS config file
     pointerToPhantom = parameterNode.GetNodeReference(self.POINTER_TO_PHANTOM)

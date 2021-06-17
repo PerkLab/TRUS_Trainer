@@ -17,8 +17,18 @@
       <string>Inputs</string>
      </property>
      <layout class="QFormLayout" name="formLayout_2">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label">
+        <property name="text">
+         <string>Case Volume</string>
+        </property>
+       </widget>
+      </item>
       <item row="0" column="1">
        <widget class="ctkComboBox" name="patientComboBox">
+        <property name="autoFillBackground">
+         <bool>true</bool>
+        </property>
         <item>
          <property name="text">
           <string>None</string>
@@ -61,47 +71,11 @@
         </item>
        </widget>
       </item>
-      <item row="0" column="0">
-       <widget class="QLabel" name="label">
-        <property name="text">
-         <string>Case Volume</string>
-        </property>
-       </widget>
-      </item>
       <item row="1" column="0">
        <widget class="QCheckBox" name="showZonesCheckbox">
         <property name="text">
          <string>Show Zones</string>
         </property>
-       </widget>
-      </item>
-      <item row="2" column="0" colspan="2">
-       <widget class="QGroupBox" name="groupBox">
-        <property name="title">
-         <string>Transforms</string>
-        </property>
-        <layout class="QFormLayout" name="formLayout">
-         <item row="0" column="0">
-          <widget class="QLabel" name="label_2">
-           <property name="text">
-            <string>PhantomToBoxModel</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="1">
-          <widget class="qMRMLNodeComboBox" name="phantomToBoxModelCombobox"/>
-         </item>
-         <item row="1" column="1">
-          <widget class="qMRMLNodeComboBox" name="probeTipToProbeCombobox"/>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="label_3">
-           <property name="text">
-            <string>ProbeTipToProbe</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
        </widget>
       </item>
      </layout>
@@ -202,11 +176,6 @@
    <class>ctkDoubleSlider</class>
    <extends>QWidget</extends>
    <header>ctkDoubleSlider.h</header>
-  </customwidget>
-  <customwidget>
-   <class>qMRMLNodeComboBox</class>
-   <extends>QWidget</extends>
-   <header>qMRMLNodeComboBox.h</header>
   </customwidget>
   <customwidget>
    <class>qMRMLWidget</class>
