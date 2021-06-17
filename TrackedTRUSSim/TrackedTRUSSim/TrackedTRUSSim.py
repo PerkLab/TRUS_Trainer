@@ -106,6 +106,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.biopsyDepthSlider.connect('valueChanged(double)', self.onMoveBiopsy)
     self.ui.customUIButton.connect('toggled(bool)', self.onCustomUIToggled)
     self.ui.fireBiopsyButton.connect('clicked(bool)', self.onFireBiopsyClicked)
+    self.ui.showZonesCheckbox.connect('stateChanged(int)', self.onShowZonesChecked)
     # self.ui.Zones.connect('toggled(bool)', self.showZones)
 
     self.eventFilter = MainWidgetEventFilter(self)
@@ -162,6 +163,13 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.fireBiopsyNeedle()
 
     self.ui.biopsyDepthSlider.value = 0
+
+
+  def onShowZonesChecked(self):
+
+    showZonesState = self.ui.showZonesCheckbox.checked
+
+    self.logic.changeZoneVisibility(showZonesState)
 
 
 #
@@ -359,6 +367,18 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     #Reset the value of BiopsyModelToBiopsyTrajectory after saving it
     self.moveBiopsy(0)
+
+  def changeZoneVisibility(self, showZonesState):
+
+    #Get the parameter node
+    parameterNode = self.getParameterNode()
+
+    #Get the node for the segmentation
+    zoneSegmentationNode = parameterNode.GetNodeReference(self.ZONE_SEGMENTATION)
+
+    #Get the display node and change the visibility
+    zoneSegmentationDisplayNode = zoneSegmentationNode.GetDisplayNode()
+    zoneSegmentationDisplayNode.SetVisibility(showZonesState)
 
   def visualizeBiopsies(self):
     '''
