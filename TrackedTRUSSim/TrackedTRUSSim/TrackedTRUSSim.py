@@ -17,7 +17,6 @@ from Resources.Utils import GenerateFanMask
 #TODO
 #Change to cylinders to 1cm or 5mm in mask
 
-
 class TrackedTRUSSim(ScriptedLoadableModule):
   """Uses ScriptedLoadableModule base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
@@ -39,6 +38,9 @@ See more information in <a href="https://github.com/organization/projectname#Tra
 This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc., Andras Lasso, PerkLab,
 and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
 """
+
+
+#Reimplementation of the vtkMRMLScriptedModuleNode
 
 
 #
@@ -231,6 +233,55 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     """
     ScriptedLoadableModuleLogic.__init__(self)
 
+    self.isSingletonParameterNode = False
+
+
+  #Redefine createParameterNode method.
+  #This method is used to create a parameter node that will not be saved with the scene, and will
+  #contain models / data that is shared across all cases within our module.
+  def createParameterNode(self):
+
+    node = ScriptedLoadableModuleLogic.createParameterNode(self)
+    node.SetSaveWithScene(False) #Ensure that the parameter node is not saved with the scene
+    node.SetSingletonTag(self.moduleName)
+    return node
+
+
+  #createCaseNode()
+  #Used to store references to case specific data nodes, and is saved with the scene. This enables us to use the save / load
+  #Slicer functions to save / load cases for the simulator, without saving unchanged data like models and static transforms
+  def createCaseNode(self):
+
+    node = ScriptedLoadableModuleLogic.createParameterNode(self)
+    node.SetSaveWithScene(True) #Save the parameter node with the scene
+    node.SetName(self.moduleName + "_case")
+    return node
+
+
+  def getParameterNode(self):
+
+    parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
+    if parameterNode:
+      # After close scene, ModuleName attribute may be removed, restore it now
+      if parameterNode.GetAttribute("ModuleName") != self.moduleName:
+        parameterNode.SetAttribute("ModuleName", self.moduleName)
+      return parameterNode
+
+    parameterNode = slicer.mrmlScene.AddNode(self.createParameterNode())
+    return parameterNode
+
+
+  def getCaseNode(self):
+
+    numberOfScriptedModuleNodes =  slicer.mrmlScene.GetNumberOfNodesByClass("vtkMRMLScriptedModuleNode")
+    for nodeIndex in range(numberOfScriptedModuleNodes):
+      node  = slicer.mrmlScene.GetNthNodeByClass( nodeIndex, "vtkMRMLScriptedModuleNode" )
+      if node.GetAttribute("ModuleName") == self.moduleName and node.GetName() == self.moduleName + "_case":
+        return node
+
+    # no parameter node was found for this module, therefore we add a new one now
+    caseNode = slicer.mrmlScene.AddNode(self.createCaseNode())
+    return caseNode
 
   #custom layout to show 3D view and yellow slice
   def splitSliceViewer(self):
@@ -321,21 +372,22 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     #Get the parameter node
     parameterNode = self.getParameterNode()
+    caseNode = self.getCaseNode()
 
     moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
 
     #Get relevant models / transforms
     BiopsyModelToBiopsyTrajectory = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_BIOPSYTRAJECTORY)
-    biopsyTransformRolesNode = parameterNode.GetParameter(self.BIOPSY_TRANSFORM_ROLES)
+    biopsyTransformRolesNode = caseNode.GetParameter(self.BIOPSY_TRANSFORM_ROLES)
 
-    print(str(biopsyTransformRolesNode))
+    print("biopsy transform roles node: " + str(biopsyTransformRolesNode))
 
     #Load all previous biopsy names
     biopsyTransformRoles = []
     if biopsyTransformRolesNode is not '':
       biopsyTransformRoles = json.loads(biopsyTransformRolesNode)
 
-    print(biopsyTransformRoles)
+    print("biopsyTransformRoles: " + str(biopsyTransformRoles))
 
     #Name the current one
     currBiopsyRole = "BiopsyModelToReference_" + str(len(biopsyTransformRoles))
@@ -347,7 +399,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     #Add a duplicate transform to the scene
     biopsyModelToReferenceNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", currBiopsyRole)
     biopsyModelToReferenceNode.SetMatrixTransformToParent(biopsyModelToReferenceTransform)
-    parameterNode.SetNodeReferenceID(currBiopsyRole, biopsyModelToReferenceNode.GetID())
+    caseNode.SetNodeReferenceID(currBiopsyRole, biopsyModelToReferenceNode.GetID())
 
     #Create a biopsy cylinder and add it to the new transform
     biopsyModelPath = os.path.join(moduleDir, "Resources", "models", "BiopsyModel.vtk")
@@ -363,7 +415,12 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     #Update the list of transform IDs
     biopsyTransformRoles = biopsyTransformRoles + [currBiopsyRole]
     biopsyTransformRoles = json.dumps(biopsyTransformRoles)
-    parameterNode.SetParameter(self.BIOPSY_TRANSFORM_ROLES, biopsyTransformRoles)
+    caseNode.SetParameter(self.BIOPSY_TRANSFORM_ROLES, biopsyTransformRoles)
+
+    biopsyTransformRolesNode = caseNode.GetParameter(self.BIOPSY_TRANSFORM_ROLES)
+
+    print("new biopsyTRansformRoles" + biopsyTransformRoles)
+    print("New transform roles node: " + str(biopsyTransformRoles))
 
     #Reset the value of BiopsyModelToBiopsyTrajectory after saving it
     self.moveBiopsy(0)
@@ -371,10 +428,10 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   def changeZoneVisibility(self, showZonesState):
 
     #Get the parameter node
-    parameterNode = self.getParameterNode()
+    caseNode = self.getCaseNode()
 
     #Get the node for the segmentation
-    zoneSegmentationNode = parameterNode.GetNodeReference(self.ZONE_SEGMENTATION)
+    zoneSegmentationNode = caseNode.GetNodeReference(self.ZONE_SEGMENTATION)
 
     #Get the display node and change the visibility
     zoneSegmentationDisplayNode = zoneSegmentationNode.GetDisplayNode()
@@ -392,9 +449,10 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     #Get the parameter node
     parameterNode = self.getParameterNode()
+    caseNode = self.getCaseNode()
 
     #Get parameter containing all the role IDs
-    biopsyTransformRolesNode = parameterNode.GetParameter(self.BIOPSY_TRANSFORM_ROLES)
+    biopsyTransformRolesNode = caseNode.GetParameter(self.BIOPSY_TRANSFORM_ROLES)
 
     print(str(biopsyTransformRolesNode))
 
@@ -515,7 +573,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     #Load in the biopsy trajectory model
     biopsyTrajectoryModel = parameterNode.GetNodeReference(self.BIOPSY_TRAJECTORY_MODEL)
-    biopsyTrajectoryModelPath = os.path.join(moduleDir, "Resources", "models", "BiopsyTrajectoryModel.vtk")
+    biopsyTrajectoryModelPath = os.path.join(moduleDir, "Resources", "models", "BiopsyTrajectoryModel.stl")
     if biopsyTrajectoryModel is None:
       biopsyTrajectoryModel =  slicer.util.loadModel(biopsyTrajectoryModelPath)
       biopsyTrajectoryModel.SetName(self.BIOPSY_TRAJECTORY_MODEL)
@@ -528,7 +586,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     biopsyTrajectoryDispNode = biopsyTrajectoryModel.GetDisplayNode()
     biopsyTrajectoryDispNode.SliceIntersectionVisibilityOn()
     biopsyTrajectoryDispNode.SetSliceIntersectionOpacity(0.4)
-    biopsyTrajectoryDispNode.SetColor(0,0,1)
+    biopsyTrajectoryDispNode.SetColor(0,1,0)
     biopsyTrajectoryDispNode.SetVisibility(False)
 
   def setupResliceDriver(self):
@@ -643,35 +701,36 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   def setupPatient(self, patient):
 
     parameterNode = self.getParameterNode()
+    caseNode = self.getCaseNode()
 
     moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
 
     #Load TRUSToCylinder transform
-    trusToCylinder = parameterNode.GetNodeReference(self.TRUS_TO_CYLINDER)
+    trusToCylinder = caseNode.GetNodeReference(self.TRUS_TO_CYLINDER)
     if trusToCylinder != None:
       slicer.mrmlScene.RemoveNode(trusToCylinder)
     trusToCylinderPath = os.path.join(moduleDir, "Resources", 'registered_zones', 'Patient_' + str(patient), 'TRUSToCylinder.h5')
     trusToCylinder = slicer.util.loadTransform(trusToCylinderPath)
     trusToCylinder.SetName(self.TRUS_TO_CYLINDER)
-    parameterNode.SetNodeReferenceID(self.TRUS_TO_CYLINDER, trusToCylinder.GetID())
+    caseNode.SetNodeReferenceID(self.TRUS_TO_CYLINDER, trusToCylinder.GetID())
 
     #Add TRUSToCylinder into hierarchy
     cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
     trusToCylinder.SetAndObserveTransformNodeID(cylinderToBox.GetID())
 
     #Load the TRUS volume
-    trusVolume = parameterNode.GetNodeReference(self.TRUS_VOLUME)
+    trusVolume = caseNode.GetNodeReference(self.TRUS_VOLUME)
     if trusVolume != None:
       slicer.mrmlScene.RemoveNode(trusVolume)
     trusPath = os.path.join(moduleDir, "Resources", "registered_zones", "Patient_" + str(patient), "TRUS.nrrd")
     trusVolume = slicer.util.loadVolume(trusPath)
     trusVolume.SetName(self.TRUS_VOLUME)
-    parameterNode.SetNodeReferenceID(self.TRUS_VOLUME, trusVolume.GetID())
+    caseNode.SetNodeReferenceID(self.TRUS_VOLUME, trusVolume.GetID())
 
     trusVolume.SetAndObserveTransformNodeID(trusToCylinder.GetID())
 
     #load zone segmentation
-    seg = parameterNode.GetNodeReference(self.ZONE_SEGMENTATION)
+    seg = caseNode.GetNodeReference(self.ZONE_SEGMENTATION)
     if seg != None:
       slicer.mrmlScene.RemoveNode(seg)
     zone_path = os.path.join(moduleDir, "Resources", 'registered_zones', 'Patient_' + str(patient), 'Zones.seg.nrrd')
@@ -685,7 +744,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
     segDisplay = seg.GetDisplayNode()
     segDisplay.SetVisibility(False)
-    parameterNode.SetNodeReferenceID(self.ZONE_SEGMENTATION, seg.GetID())
+    caseNode.SetNodeReferenceID(self.ZONE_SEGMENTATION, seg.GetID())
 
     seg.SetAndObserveTransformNodeID(trusToCylinder.GetID())
 
