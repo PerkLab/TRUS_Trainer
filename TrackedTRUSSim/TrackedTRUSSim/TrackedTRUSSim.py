@@ -9,8 +9,10 @@ from slicer.util import VTKObservationMixin
 import ScreenCapture
 import numpy as np
 from vtk.util.numpy_support import vtk_to_numpy
-from Resources.Utils import GenerateFanMask
 from datetime import datetime
+from glob import glob
+from pathlib import Path
+
 #
 # TrackedTRUSSim
 #
@@ -106,22 +108,111 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     #Create logic class
     self.logic = TrackedTRUSSimLogic()
-    self.logic.setup()
 
     #Connect UI
-    self.ui.patientComboBox.currentIndexChanged.connect(self.onPatientComboBoxChanged)
+    self.ui.userComboBox.currentIndexChanged.connect(self.onUserComboBoxChanged)
+    self.ui.createUserButton.connect('clicked(bool)', self.createNewUserDialog)
+    self.ui.loadBiopsyButton.connect('clicked(bool)', self.onLoadBiopsyButton)
     self.ui.biopsyDepthSlider.connect('valueChanged(double)', self.onMoveBiopsy)
     self.ui.customUIButton.connect('toggled(bool)', self.onCustomUIToggled)
     self.ui.fireBiopsyButton.connect('clicked(bool)', self.onFireBiopsyClicked)
     self.ui.showZonesCheckbox.connect('stateChanged(int)', self.onShowZonesChecked)
-    self.ui.saveButton.connect('clicked(bool)', self.saveScene)
-    # self.ui.Zones.connect('toggled(bool)', self.showZones)
+    self.ui.showBiopsyCheckbox.connect('stateChanged(int)', self.onShowBiopsyChecked)
+    self.ui.showModelsCheckbox.connect('stateChanged(int)', self.onShowModelsChecked)
+    self.ui.saveBiopsyButton.connect('clicked(bool)', self.saveBiopsy)
 
     self.eventFilter = MainWidgetEventFilter(self)
     slicer.util.mainWindow().installEventFilter(self.eventFilter)
 
-    #Ensure that all biopsies currently in the parameter node are being shown
-    self.logic.visualizeBiopsies()
+    #Populate the users combobox with all folder names in UserData
+    self.updateUsersComboBox()
+
+    #Ensure that all checkbox states
+
+  def createNewUserDialog(self):
+
+    #Create the basic window components
+    self.userWidget = qt.QDialog()
+    self.userWidget.setModal(True)
+    self.userFrame = qt.QFrame(self.userWidget)
+    self.userFrame.setStyleSheet(slicer.util.mainWindow().styleSheet)
+    self.userWidget.setWindowTitle('Create New Username')
+    popupGeometry = qt.QRect()
+    mainWindow = slicer.util.mainWindow()
+
+    #Adjust the geometry of the window if the main window is available as reference
+    if mainWindow:
+      windowWidth = mainWindow.width * 0.35
+      windowHeight = mainWindow.height * 0.1
+      popupGeometry.setWidth(windowWidth)
+      popupGeometry.setHeight(windowHeight)
+      self.userWidget.setGeometry(popupGeometry)
+      self.userFrame.setGeometry(popupGeometry)
+      self.userWidget.move(mainWindow.width / 2.0 - windowWidth,
+                           mainWindow.height / 2 - windowHeight)
+    userDialogLayout = qt.QVBoxLayout()
+    userDialogLayout.setContentsMargins(12, 4, 4, 4)
+    userDialogLayout.setSpacing(4)
+
+    userDialogButtonLayout = qt.QFormLayout()
+    userDialogButtonLayout.setContentsMargins(12, 4, 4, 4)
+    userDialogButtonLayout.setSpacing(4)
+
+    self.usernameLineEdit = qt.QLineEdit()
+    userDialogButtonLayout.addRow(self.usernameLineEdit)
+
+    self.createNewUsernameButton = qt.QPushButton("Create New Username")
+    userDialogButtonLayout.addRow(self.createNewUsernameButton)
+
+    self.createNewUsernameButton.connect('clicked(bool)', self.onNewUserCreatedButton)
+
+    userDialogLayout.addLayout(userDialogButtonLayout)
+    self.userFrame.setLayout(userDialogLayout)
+
+    self.userWidget.open()
+    self.userWidget.visible = True
+
+  def onNewUserCreatedButton(self):
+
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+    newUserPath = os.path.join(moduleDir, "Resources", "UserData", self.usernameLineEdit.text)
+
+    Path(newUserPath).mkdir(parents=True, exist_ok=True)
+
+    #Close the dialog
+    self.userWidget.close()
+    self.userWidget.visible = False
+
+    #Repopulate the user combobox
+    self.updateUsersComboBox()
+
+
+  def updateUsersComboBox(self):
+
+    #Get the names of all user folders
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+    userDataPath = os.path.join(moduleDir, "Resources", "UserData")
+    allUsers = [f.name for f in os.scandir(userDataPath) if f.is_dir()]
+
+    #Clear the combo box and add all the newly found names
+    self.ui.userComboBox.clear()
+    for user in allUsers:
+      self.ui.userComboBox.addItem(user)
+
+    self.updateBiopsyComboBox()
+
+
+  def updateBiopsyComboBox(self):
+
+    #Get the names of all user folders
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+    userPath = os.path.join(moduleDir, "Resources", "UserData", self.ui.userComboBox.currentText)
+    allBiopsies = [f.name for f in os.scandir(userPath)]
+
+    #Clear the combo box and add all the newly found names
+    self.ui.loadBiopsyComboBox.clear()
+    for biopsy in allBiopsies:
+      self.ui.loadBiopsyComboBox.addItem(biopsy)
 
   def onCustomUIToggled(self, toggled):
 
@@ -150,13 +241,28 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     slicer.util.setStatusBarVisible(visible)
     slicer.util.setMenuBarsVisible(visible)
 
-  def onPatientComboBoxChanged(self):
+  def onCaseComboBoxChanged(self):
 
-    # get current patient
-    patient = self.ui.patientComboBox.currentIndex
+    # get current case
+    case = self.ui.caseComboBox.currentIndex
 
     # load the appropriate transforms
-    self.logic.setupPatient(patient)
+    self.logic.setupCase(case)
+
+  def onUserComboBoxChanged(self):
+    self.updateBiopsyComboBox()
+
+  def onLoadBiopsyButton(self):
+    pass
+
+  def onShowModelsChecked(self):
+    pass
+
+  def onShowBiopsyChecked(self):
+    pass
+
+  def saveBiopsy(self):
+    self.logic.saveScene(self.ui.biopsyNameLineEdit.text, self.ui.userComboBox.currentText)
 
   def onMoveBiopsy(self):
 
@@ -193,10 +299,6 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       return True
     else:
       return False
-
-  def saveScene(self):
-
-    self.logic.saveScene()
 
 
 # TrackedTRUSSimLogic
@@ -261,23 +363,23 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     self.currCaseNumber = -1
 
 
-  def saveScene(self):
+  def saveScene(self, filename, currentUser):
 
     #only save the scene if a case is loaded
     if self.caseLoaded:
 
       #Create filename
-      date = datetime.now().strftime("%m%d%y_%H%M%S")
-      filename = "TRUSSimulator_Case{}_{}.mrml".format(self.currCaseNumber, date)
+      # date = datetime.now().strftime("%m%d%y_%H%M%S")
+      # filename = "TRUSSimulator_Case{}_{}.mrml".format(self.currCaseNumber, date)
 
       #Append to current directory
       moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
-      biopsyModelPath = os.path.join(moduleDir, "Resources", "SavedData", filename)
+      biopsySavePath = os.path.join(moduleDir, "Resources", "SavedData", currentUser, filename)
 
-      print("save path: " + biopsyModelPath)
+      print("save path: " + biopsySavePath)
 
       #save the scene to file
-      slicer.util.saveScene(biopsyModelPath)
+      slicer.util.saveScene(biopsySavePath)
 
 
   #Redefine createParameterNode method.
@@ -538,7 +640,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
         biopsyDispNode.SetColor(0, 0.5, 0)
 
 
-  def setup(self):
+  def setupParameterNode(self):
     """
     Setup the slicer scene.
     """
@@ -763,9 +865,9 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     pointerTipToPointer.SetAndObserveTransformNodeID(pointerToPhantom.GetID())
 
 
-  def setupPatient(self, patient):
+  def setupCase(self, case):
 
-    self.currCaseNumber = patient
+    self.currCaseNumber = case
 
     parameterNode = self.getParameterNode()
     caseNode = self.getCaseNode()
@@ -776,7 +878,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     trusToCylinder = caseNode.GetNodeReference(self.TRUS_TO_CYLINDER)
     if trusToCylinder != None:
       slicer.mrmlScene.RemoveNode(trusToCylinder)
-    trusToCylinderPath = os.path.join(moduleDir, "Resources", 'registered_zones', 'Patient_' + str(patient), 'TRUSToCylinder.h5')
+    trusToCylinderPath = os.path.join(moduleDir, "Resources", 'registered_zones', 'Patient_' + str(case), 'TRUSToCylinder.h5')
     trusToCylinder = slicer.util.loadTransform(trusToCylinderPath)
     trusToCylinder.SetName(self.TRUS_TO_CYLINDER)
     caseNode.SetNodeReferenceID(self.TRUS_TO_CYLINDER, trusToCylinder.GetID())
@@ -789,7 +891,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     trusVolume = caseNode.GetNodeReference(self.TRUS_VOLUME)
     if trusVolume != None:
       slicer.mrmlScene.RemoveNode(trusVolume)
-    trusPath = os.path.join(moduleDir, "Resources", "registered_zones", "Patient_" + str(patient), "TRUS.nrrd")
+    trusPath = os.path.join(moduleDir, "Resources", "registered_zones", "Patient_" + str(case), "TRUS.nrrd")
     trusVolume = slicer.util.loadVolume(trusPath)
     trusVolume.SetName(self.TRUS_VOLUME)
     caseNode.SetNodeReferenceID(self.TRUS_VOLUME, trusVolume.GetID())
@@ -800,7 +902,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     seg = caseNode.GetNodeReference(self.ZONE_SEGMENTATION)
     if seg != None:
       slicer.mrmlScene.RemoveNode(seg)
-    zone_path = os.path.join(moduleDir, "Resources", 'registered_zones', 'Patient_' + str(patient), 'Zones.seg.nrrd')
+    zone_path = os.path.join(moduleDir, "Resources", 'registered_zones', 'Patient_' + str(case), 'Zones.seg.nrrd')
     zoneNode = slicer.util.loadLabelVolume(zone_path)
 
     #Setup segmentation
