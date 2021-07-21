@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MRML  version="Slicer4.4.0" userTags="">
+<Crosshair
+  id="vtkMRMLCrosshairNodedefault" name="Crosshair" hideFromEditors="true" selectable="true" selected="false" singletonTag="default" crosshairMode="NoCrosshair" crosshairBehavior="OffsetJumpSlice" crosshairThickness="Fine" crosshairRAS="0 0 0"></Crosshair>
+ <Selection
+  id="vtkMRMLSelectionNodeSingleton" name="Selection" hideFromEditors="true" selectable="true" selected="false" singletonTag="Singleton" references="ActiveVolume:vtkMRMLScalarVolumeNode1;unit/frequency:vtkMRMLUnitNodeApplicationFrequency;unit/intensity:vtkMRMLUnitNodeApplicationIntensity;unit/length:vtkMRMLUnitNodeApplicationLength;unit/time:vtkMRMLUnitNodeApplicationTime;unit/velocity:vtkMRMLUnitNodeApplicationVelocity;" ></Selection>
+ <Interaction
+  id="vtkMRMLInteractionNodeSingleton" name="Interaction" hideFromEditors="true" selectable="true" selected="false" singletonTag="Singleton" currentInteractionMode="ViewTransform" placeModePersistence="false" lastInteractionMode="ViewTransform" ></Interaction>
+ <View
+  id="vtkMRMLViewNode1" name="View1" hideFromEditors="false" selectable="true" selected="false" singletonTag="1" attributes="MappedInLayout:1" layoutLabel="1" layoutName="1" active="false" visibility="true" backgroundColor="0.756863 0.764706 0.909804" backgroundColor2="0.454902 0.470588 0.745098" layoutColor="0.454902 0.513725 0.913725" orientationMarkerType="none" orientationMarkerSize="medium" rulerType="none" rulerColor="white" AxisLabels="L;R;P;A;I;S" fieldOfView="200" letterSize="0.05" boxVisible="false" fiducialsVisible="true" fiducialLabelsVisible="true" axisLabelsVisible="false" axisLabelsCameraDependent="true" animationMode="Off" viewAxisMode="LookFrom" spinDegrees="2" spinMs="5" spinDirection="YawLeft" rotateDegrees="5" rockLength="200" rockCount="0" stereoType="NoStereo" renderMode="Perspective" useDepthPeeling="0" gpuMemorySize="0" autoReleaseGraphicsResources="false" expectedFPS="8" volumeRenderingQuality="Adaptive" raycastTechnique="Composite" volumeRenderingSurfaceSmoothing="0" volumeRenderingOversamplingFactor="2" linkedControl="0" ></View>
+ <Slice
+  id="vtkMRMLSliceNodeRed" name="Red" hideFromEditors="false" selectable="true" selected="false" singletonTag="Red" attributes="MappedInLayout:1" layoutLabel="R" layoutName="Red" active="false" visibility="true" backgroundColor="0 0 0" backgroundColor2="0 0 0" layoutColor="0.952941 0.290196 0.2" orientationMarkerType="none" orientationMarkerSize="medium" rulerType="none" rulerColor="white" AxisLabels="L;R;P;A;I;S" fieldOfView="532.508 680.541 0.19733" dimensions="518 662 1" xyzOrigin="0 0 0" sliceResolutionMode="1" uvwExtents="532.508 680.541 0.19733" uvwDimensions="256 256 1" uvwOrigin="0 0 0" activeSlice="0" layoutGridRows="1" layoutGridColumns="1" sliceToRAS="-1 0 0 -199.5 0 1 0 -199.5 0 0 1 0 0 0 0 1" orientationMatrixAxial="-1 0 0 0 1 0 0 0 1" orientationMatrixSagittal="0 0 1 -1 0 0 0 1 0" orientationMatrixCoronal="-1 0 0 0 0 1 0 1 0" orientation="Axial" defaultOrientation="Axial" orientationReference="Axial" jumpMode="1" sliceVisibility="false" widgetVisibility="false" widgetOutlineVisibility="true" useLabelOutline="false" sliceSpacingMode="0" prescribedSliceSpacing="1 1 1" ></Slice>
+ <Slice
+  id="vtkMRMLSliceNodeGreen" name="Green" hideFromEditors="false" selectable="true" selected="false" singletonTag="Green" attributes="MappedInLayout:0" layoutLabel="G" layoutName="Green" active="false" visibility="true" backgroundColor="0 0 0" backgroundColor2="0 0 0" layoutColor="0.431373 0.690196 0.294118" orientationMarkerType="none" orientationMarkerSize="medium" rulerType="none" rulerColor="white" AxisLabels="L;R;P;A;I;S" fieldOfView="532.508 400 1" dimensions="430 323 1" xyzOrigin="0 0 0" sliceResolutionMode="1" uvwExtents="532.508 400 1" uvwDimensions="256 256 1" uvwOrigin="0 0 0" activeSlice="0" layoutGridRows="1" layoutGridColumns="1" sliceToRAS="-1 0 0 -199.5 0 -1 0 -199.5 0 0 1 0 0 0 0 1" orientationMatrixAxial="-1 0 0 0 1 0 0 0 1" orientationMatrixSagittal="0 0 1 -1 0 0 0 1 0" orientationMatrixCoronal="-1 0 0 0 0 1 0 1 0" orientation="Reformat" defaultOrientation="Coronal" orientationReference="Coronal" jumpMode="1" sliceVisibility="false" widgetVisibility="false" widgetOutlineVisibility="true" useLabelOutline="false" sliceSpacingMode="0" prescribedSliceSpacing="1 1 1" ></Slice>
+ <Slice
+  id="vtkMRMLSliceNodeYellow" name="Yellow" hideFromEditors="false" selectable="true" selected="false" singletonTag="Yellow" attributes="MappedInLayout:0" layoutLabel="Y" layoutName="Yellow" active="false" visibility="true" backgroundColor="0 0 0" backgroundColor2="0 0 0" layoutColor="0.929412 0.835294 0.298039" orientationMarkerType="none" orientationMarkerSize="medium" rulerType="none" rulerColor="white" AxisLabels="L;R;P;A;I;S" fieldOfView="532.508 400 1" dimensions="430 323 1" xyzOrigin="0 0 0" sliceResolutionMode="1" uvwExtents="532.508 400 1" uvwDimensions="256 256 1" uvwOrigin="0 0 0" activeSlice="0" layoutGridRows="1" layoutGridColumns="1" sliceToRAS="0 -1 0 -199.5 -1 0 0 -199.5 0 0 1 0 0 0 0 1" orientationMatrixAxial="-1 0 0 0 1 0 0 0 1" orientationMatrixSagittal="0 0 1 -1 0 0 0 1 0" orientationMatrixCoronal="-1 0 0 0 0 1 0 1 0" orientation="Reformat" defaultOrientation="Sagittal" orientationReference="Sagittal" jumpMode="1" sliceVisibility="false" widgetVisibility="false" widgetOutlineVisibility="true" useLabelOutline="false" sliceSpacingMode="0" prescribedSliceSpacing="1 1 1" ></Slice>
+ <Layout
+  id="vtkMRMLLayoutNodevtkMRMLLayoutNode" name="Layout" hideFromEditors="true" selectable="true" selected="false" singletonTag="vtkMRMLLayoutNode" currentViewArrangement="501" guiPanelVisibility="1" bottomPanelVisibility ="1" guiPanelLR="0" collapseSliceControllers="0"
+ numberOfCompareViewRows="1" numberOfCompareViewColumns="1" numberOfLightboxRows="6" numberOfLightboxColumns="6" mainPanelSize="400" secondaryPanelSize="400" ></Layout>
+ <SliceComposite
+  id="vtkMRMLSliceCompositeNodeRed" name="SliceComposite" hideFromEditors="true" selectable="true" selected="false" singletonTag="Red" references="backgroundVolume:vtkMRMLScalarVolumeNode1;" compositing="0" foregroundOpacity="0" labelOpacity="1" linkedControl="0" hotLinkedControl="0" fiducialVisibility="1" fiducialLabelVisibility="1" sliceIntersectionVisibility="0" layoutName="Red" annotationSpace="IJKAndRAS" annotationMode="All" doPropagateVolumeSelection="1" ></SliceComposite>
+ <SubjectHierarchy
+  id="vtkMRMLSubjectHierarchyNode1" name="SubjectHierarchy" hideFromEditors="false" selectable="true" selected="false" attributes="SubjectHierarchyVersion:2" >
+   <SubjectHierarchyItem id="3" name="Scene" parent="0" type="" expanded="true" attributes="Level^Scene|">
+     <SubjectHierarchyItem id="7" name="ReferenceToRAS" parent="3" type="Transforms" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="8" name="BoxModelToReference" parent="3" type="Transforms" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="9" name="CylinderToBox" parent="3" type="Transforms" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="10" name="PhantomToReference" parent="3" type="Transforms" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="11" name="ProbeToPhantom" parent="3" type="Transforms" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="12" name="ProbeTipToProbe" parent="3" type="Transforms" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="13" name="ProbeModelToProbeTip" parent="3" type="Transforms" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="14" name="USMaskToProbeModel" parent="3" type="Transforms" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="15" name="BiopsyTrajectoryToProbeModel" parent="3" type="Transforms" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="16" name="BiopsyModelToBiopsyTrajectory" parent="3" type="Transforms" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="17" name="PointerToPhantom" parent="3" type="Transforms" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="18" name="PointerTipToPointer" parent="3" type="Transforms" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="19" name="ConfigTextNode" parent="3" type="Texts" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="20" name="BoxModel" parent="3" type="Models" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="21" name="CylinderModel" parent="3" type="Models" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="22" name="ProbeModel" parent="3" type="Models" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="25" name="MaskVolume" parent="3" type="Volumes" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="26" name="BiopsyModel" parent="3" type="Models" expanded="true"></SubjectHierarchyItem>
+     <SubjectHierarchyItem id="27" name="BiopsyTrajectoryModel" parent="3" type="Models" expanded="true"></SubjectHierarchyItem></SubjectHierarchyItem></SubjectHierarchy>
+ <SliceComposite
+  id="vtkMRMLSliceCompositeNodeGreen" name="SliceComposite_1" hideFromEditors="true" selectable="true" selected="false" singletonTag="Green" references="backgroundVolume:vtkMRMLScalarVolumeNode1;" compositing="0" foregroundOpacity="0" labelOpacity="1" linkedControl="0" hotLinkedControl="0" fiducialVisibility="1" fiducialLabelVisibility="1" sliceIntersectionVisibility="0" layoutName="Green" annotationSpace="IJKAndRAS" annotationMode="All" doPropagateVolumeSelection="1" ></SliceComposite>
+ <SliceComposite
+  id="vtkMRMLSliceCompositeNodeYellow" name="SliceComposite_2" hideFromEditors="true" selectable="true" selected="false" singletonTag="Yellow" references="backgroundVolume:vtkMRMLScalarVolumeNode1;" compositing="0" foregroundOpacity="0" labelOpacity="1" linkedControl="0" hotLinkedControl="0" fiducialVisibility="1" fiducialLabelVisibility="1" sliceIntersectionVisibility="0" layoutName="Yellow" annotationSpace="IJKAndRAS" annotationMode="All" doPropagateVolumeSelection="1" ></SliceComposite>
+ <Camera
+  id="vtkMRMLCameraNode1" name="Camera" description="Default Scene Camera" hideFromEditors="false" selectable="true" selected="false" singletonTag="1" userTags="" position="0 500 0" focalPoint="0 0 0" viewUp="0 0 1" parallelProjection="false" parallelScale="1" viewAngle="30" appliedTransform="1 0 0 0  0 1 0 0  0 0 1 0  0 0 0 1" ></Camera>
+ <ClipModels
+  id="vtkMRMLClipModelsNodevtkMRMLClipModelsNode" name="ClipModels" hideFromEditors="true" selectable="true" selected="false" singletonTag="vtkMRMLClipModelsNode" clipType="0" redSliceClipState="0" yellowSliceClipState="0" greenSliceClipState="0" ></ClipModels>
+ <MetricScript
+  id="vtkMRMLMetricScriptNode1" name="ElapsedTime" hideFromEditors="false" selectable="true" selected="false" userTags="" ></MetricScript>
+ <MetricScript
+  id="vtkMRMLMetricScriptNode2" name="PathLength" hideFromEditors="false" selectable="true" selected="false" userTags="" ></MetricScript>
+ <MetricScript
+  id="vtkMRMLMetricScriptNode3" name="TissueDamage" hideFromEditors="false" selectable="true" selected="false" userTags="" ></MetricScript>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode1" name="TissueDamage []" hideFromEditors="true" selectable="true" selected="false" references="AssociatedMetricScript:vtkMRMLMetricScriptNode3;" userTags="" ></MetricInstance>
+ <MetricScript
+  id="vtkMRMLMetricScriptNode4" name="TissuePath" hideFromEditors="false" selectable="true" selected="false" userTags="" ></MetricScript>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode2" name="TissuePath []" hideFromEditors="true" selectable="true" selected="false" references="AssociatedMetricScript:vtkMRMLMetricScriptNode4;" userTags="" ></MetricInstance>
+ <MetricScript
+  id="vtkMRMLMetricScriptNode5" name="TissueTime" hideFromEditors="false" selectable="true" selected="false" userTags="" ></MetricScript>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode3" name="TissueTime []" hideFromEditors="true" selectable="true" selected="false" references="AssociatedMetricScript:vtkMRMLMetricScriptNode5;" userTags="" ></MetricInstance>
+ <ScriptedModule
+  id="vtkMRMLScriptedModuleNodeDataProbe" name="ScriptedModule" hideFromEditors="true" selectable="true" selected="false" singletonTag="DataProbe" ModuleName ="DataProbe" ></ScriptedModule>
+ <ScriptedModule
+  id="vtkMRMLScriptedModuleNodeUserStatistics" name="UserStatistics" hideFromEditors="true" selectable="true" selected="false" singletonTag="UserStatistics" attributes="ModuleName:UserStatistics" parameter0= "ScreenshotDirectory C:\Users\cbarr\Documents\SlicerUserStatistics" parameter1= "ScreenshotEnabled False" ></ScriptedModule>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode4" name="ElapsedTime [Any = ReferenceToRAS]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode4;AssociatedMetricScript:vtkMRMLMetricScriptNode1;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode5" name="PathLength [Any = ReferenceToRAS]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode4;AssociatedMetricScript:vtkMRMLMetricScriptNode2;" userTags="" ></MetricInstance>
+ <TransformStorage
+  id="vtkMRMLTransformStorageNode1" name="TransformStorage" hideFromEditors="true" selectable="true" selected="false" fileName="../transforms/BoxModelToReference.h5" useCompression="1" defaultWriteFileExtension="h5" readState="0" writeState="0" preferITKv3CompatibleTransforms="false" ></TransformStorage>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode6" name="ElapsedTime [Any = BoxModelToReference]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode5;AssociatedMetricScript:vtkMRMLMetricScriptNode1;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode7" name="PathLength [Any = BoxModelToReference]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode5;AssociatedMetricScript:vtkMRMLMetricScriptNode2;" userTags="" ></MetricInstance>
+ <TransformStorage
+  id="vtkMRMLTransformStorageNode2" name="TransformStorage_1" hideFromEditors="true" selectable="true" selected="false" fileName="../transforms/CylinderToBox.h5" useCompression="1" defaultWriteFileExtension="h5" readState="0" writeState="0" preferITKv3CompatibleTransforms="false" ></TransformStorage>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode8" name="ElapsedTime [Any = CylinderToBox]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode6;AssociatedMetricScript:vtkMRMLMetricScriptNode1;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode9" name="PathLength [Any = CylinderToBox]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode6;AssociatedMetricScript:vtkMRMLMetricScriptNode2;" userTags="" ></MetricInstance>
+ <TransformStorage
+  id="vtkMRMLTransformStorageNode3" name="TransformStorage_2" hideFromEditors="true" selectable="true" selected="false" fileName="../transforms/PhantomToReference.h5" useCompression="1" defaultWriteFileExtension="h5" readState="0" writeState="0" preferITKv3CompatibleTransforms="false" ></TransformStorage>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode10" name="ElapsedTime [Any = PhantomToReference]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode7;AssociatedMetricScript:vtkMRMLMetricScriptNode1;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode11" name="PathLength [Any = PhantomToReference]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode7;AssociatedMetricScript:vtkMRMLMetricScriptNode2;" userTags="" ></MetricInstance>
+ <TransformStorage
+  id="vtkMRMLTransformStorageNode4" name="TransformStorage_3" hideFromEditors="true" selectable="true" selected="false" fileName="../transforms/ProbeToPhantom.h5" useCompression="1" defaultWriteFileExtension="h5" readState="0" writeState="0" preferITKv3CompatibleTransforms="false" ></TransformStorage>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode12" name="ElapsedTime [Any = ProbeToPhantom]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode8;AssociatedMetricScript:vtkMRMLMetricScriptNode1;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode13" name="PathLength [Any = ProbeToPhantom]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode8;AssociatedMetricScript:vtkMRMLMetricScriptNode2;" userTags="" ></MetricInstance>
+ <TransformStorage
+  id="vtkMRMLTransformStorageNode5" name="TransformStorage_4" hideFromEditors="true" selectable="true" selected="false" fileName="../transforms/ProbeTipToProbe.h5" useCompression="1" defaultWriteFileExtension="h5" readState="0" writeState="0" preferITKv3CompatibleTransforms="false" ></TransformStorage>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode14" name="ElapsedTime [Any = ProbeTipToProbe]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode9;AssociatedMetricScript:vtkMRMLMetricScriptNode1;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode15" name="PathLength [Any = ProbeTipToProbe]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode9;AssociatedMetricScript:vtkMRMLMetricScriptNode2;" userTags="" ></MetricInstance>
+ <TransformStorage
+  id="vtkMRMLTransformStorageNode6" name="TransformStorage_5" hideFromEditors="true" selectable="true" selected="false" fileName="../transforms/ProbeModelToProbeTip.h5" useCompression="1" defaultWriteFileExtension="h5" readState="0" writeState="0" preferITKv3CompatibleTransforms="false" ></TransformStorage>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode16" name="ElapsedTime [Any = ProbeModelToProbeTip]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode10;AssociatedMetricScript:vtkMRMLMetricScriptNode1;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode17" name="PathLength [Any = ProbeModelToProbeTip]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode10;AssociatedMetricScript:vtkMRMLMetricScriptNode2;" userTags="" ></MetricInstance>
+ <TransformStorage
+  id="vtkMRMLTransformStorageNode7" name="TransformStorage_6" hideFromEditors="true" selectable="true" selected="false" fileName="../transforms/USMaskToProbeModel.h5" useCompression="1" defaultWriteFileExtension="h5" readState="0" writeState="0" preferITKv3CompatibleTransforms="false" ></TransformStorage>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode18" name="ElapsedTime [Any = USMaskToProbeModel]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode11;AssociatedMetricScript:vtkMRMLMetricScriptNode1;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode19" name="PathLength [Any = USMaskToProbeModel]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode11;AssociatedMetricScript:vtkMRMLMetricScriptNode2;" userTags="" ></MetricInstance>
+ <TransformStorage
+  id="vtkMRMLTransformStorageNode8" name="TransformStorage_7" hideFromEditors="true" selectable="true" selected="false" fileName="../transforms/BiopsyTrajectoryToProbeModel.h5" useCompression="1" defaultWriteFileExtension="h5" readState="0" writeState="0" preferITKv3CompatibleTransforms="false" ></TransformStorage>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode20" name="ElapsedTime [Any = BiopsyTrajectoryToProbeModel]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode12;AssociatedMetricScript:vtkMRMLMetricScriptNode1;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode21" name="PathLength [Any = BiopsyTrajectoryToProbeModel]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode12;AssociatedMetricScript:vtkMRMLMetricScriptNode2;" userTags="" ></MetricInstance>
+ <TransformStorage
+  id="vtkMRMLTransformStorageNode9" name="TransformStorage_8" hideFromEditors="true" selectable="true" selected="false" fileName="../transforms/BiopsyModelToBiopsyTrajectory.h5" useCompression="1" defaultWriteFileExtension="h5" readState="0" writeState="0" preferITKv3CompatibleTransforms="false" ></TransformStorage>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode22" name="ElapsedTime [Any = BiopsyModelToBiopsyTrajectory]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode13;AssociatedMetricScript:vtkMRMLMetricScriptNode1;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode23" name="PathLength [Any = BiopsyModelToBiopsyTrajectory]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode13;AssociatedMetricScript:vtkMRMLMetricScriptNode2;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode24" name="ElapsedTime [Any = PointerToPhantom]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode14;AssociatedMetricScript:vtkMRMLMetricScriptNode1;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode25" name="PathLength [Any = PointerToPhantom]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode14;AssociatedMetricScript:vtkMRMLMetricScriptNode2;" userTags="" ></MetricInstance>
+ <TransformStorage
+  id="vtkMRMLTransformStorageNode10" name="TransformStorage_9" hideFromEditors="true" selectable="true" selected="false" fileName="../transforms/PointerTipToPointer.h5" useCompression="1" defaultWriteFileExtension="h5" readState="0" writeState="0" preferITKv3CompatibleTransforms="false" ></TransformStorage>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode26" name="ElapsedTime [Any = PointerTipToPointer]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode15;AssociatedMetricScript:vtkMRMLMetricScriptNode1;" userTags="" ></MetricInstance>
+ <MetricInstance
+  id="vtkMRMLMetricInstanceNode27" name="PathLength [Any = PointerTipToPointer]" hideFromEditors="true" selectable="true" selected="false" references="0/Any:vtkMRMLLinearTransformNode15;AssociatedMetricScript:vtkMRMLMetricScriptNode2;" userTags="" ></MetricInstance>
+ <ModelStorage
+  id="vtkMRMLModelStorageNode1" name="ModelStorage" hideFromEditors="true" selectable="true" selected="false" fileName="../models/BoxModel.vtk" useCompression="1" defaultWriteFileExtension="vtk" readState="0" writeState="0" coordinateSystem="LPS" ></ModelStorage>
+ <ModelDisplay
+  id="vtkMRMLModelDisplayNode4" name="ModelDisplay" hideFromEditors="true" selectable="true" selected="false" color="0 0 1" edgeColor="0 0 0" selectedColor="1 0 0" selectedAmbient="0.4" ambient="0" diffuse="1" selectedSpecular="0.5" specular="0" power="1" opacity="0.1" sliceIntersectionOpacity="1" pointSize="1" lineWidth="1" representation="2" lighting="true" interpolation="1" shading="true" visibility="true" visibility2D="false" visibility3D="true" edgeVisibility="false" clipping="false" sliceIntersectionThickness="1" frontfaceCulling="false" backfaceCulling="false" scalarVisibility="false" vectorVisibility="false" tensorVisibility="false" interpolateTexture="false" scalarRangeFlag="UseData" scalarRange="0 -1" activeAttributeLocation="point" viewNodeRef="" folderDisplayOverrideAllowed="true" sliceDisplayMode="intersection" thresholdEnabled="false" thresholdRange="0 -1" backfaceColorHSVOffset="-0.05 -0.1 0" ></ModelDisplay>
+ <ModelStorage
+  id="vtkMRMLModelStorageNode2" name="ModelStorage_1" hideFromEditors="true" selectable="true" selected="false" fileName="../models/CylinderModel.vtk" useCompression="1" defaultWriteFileExtension="vtk" readState="0" writeState="0" coordinateSystem="LPS" ></ModelStorage>
+ <ModelDisplay
+  id="vtkMRMLModelDisplayNode5" name="ModelDisplay_1" hideFromEditors="true" selectable="true" selected="false" color="0.9 0.9 0.3" edgeColor="0 0 0" selectedColor="1 0 0" selectedAmbient="0.4" ambient="0" diffuse="1" selectedSpecular="0.5" specular="0" power="1" opacity="0.1" sliceIntersectionOpacity="1" pointSize="1" lineWidth="1" representation="2" lighting="true" interpolation="1" shading="true" visibility="true" visibility2D="false" visibility3D="true" edgeVisibility="false" clipping="false" sliceIntersectionThickness="1" frontfaceCulling="false" backfaceCulling="false" scalarVisibility="false" vectorVisibility="false" tensorVisibility="false" interpolateTexture="false" scalarRangeFlag="UseData" scalarRange="0 -1" activeAttributeLocation="point" viewNodeRef="" folderDisplayOverrideAllowed="true" sliceDisplayMode="intersection" thresholdEnabled="false" thresholdRange="0 -1" backfaceColorHSVOffset="-0.05 -0.1 0" ></ModelDisplay>
+ <ModelStorage
+  id="vtkMRMLModelStorageNode3" name="ModelStorage_2" hideFromEditors="true" selectable="true" selected="false" fileName="../models/ProbeModel.stl" useCompression="1" defaultWriteFileExtension="vtk" readState="0" writeState="0" coordinateSystem="LPS" ></ModelStorage>
+ <ModelDisplay
+  id="vtkMRMLModelDisplayNode6" name="ModelDisplay_2" hideFromEditors="true" selectable="true" selected="false" color="0.9 0.9 0.3" edgeColor="0 0 0" selectedColor="1 0 0" selectedAmbient="0.4" ambient="0" diffuse="1" selectedSpecular="0.5" specular="0" power="1" opacity="1" sliceIntersectionOpacity="1" pointSize="1" lineWidth="1" representation="2" lighting="true" interpolation="1" shading="true" visibility="true" visibility2D="false" visibility3D="true" edgeVisibility="false" clipping="false" sliceIntersectionThickness="1" frontfaceCulling="false" backfaceCulling="false" scalarVisibility="false" vectorVisibility="false" tensorVisibility="false" interpolateTexture="false" scalarRangeFlag="UseData" scalarRange="0 -1" activeAttributeLocation="point" viewNodeRef="" folderDisplayOverrideAllowed="true" sliceDisplayMode="intersection" thresholdEnabled="false" thresholdRange="0 -1" backfaceColorHSVOffset="-0.05 -0.1 0" ></ModelDisplay>
+ <VolumeDisplay
+  id="vtkMRMLScalarVolumeDisplayNode1" name="VolumeDisplay" hideFromEditors="true" selectable="true" selected="false" color="0.9 0.9 0.3" edgeColor="0 0 0" selectedColor="1 0 0" selectedAmbient="0.4" ambient="0" diffuse="1" selectedSpecular="0.5" specular="0" power="1" opacity="1" sliceIntersectionOpacity="1" pointSize="1" lineWidth="1" representation="2" lighting="true" interpolation="1" shading="true" visibility="true" visibility2D="false" visibility3D="true" edgeVisibility="false" clipping="false" sliceIntersectionThickness="1" frontfaceCulling="false" backfaceCulling="false" scalarVisibility="false" vectorVisibility="false" tensorVisibility="false" interpolateTexture="false" scalarRangeFlag="UseData" scalarRange="0 100" colorNodeID="vtkMRMLColorTableNodeGrey" activeAttributeLocation="point" viewNodeRef="" folderDisplayOverrideAllowed="true" window="254" level="127" upperThreshold="600" lowerThreshold="10" interpolate="1" windowLevelLocked="false" autoWindowLevel="1" applyThreshold="0" autoThreshold="0" ></VolumeDisplay>
+ <VolumeArchetypeStorage
+  id="vtkMRMLVolumeArchetypeStorageNode4" name="VolumeArchetypeStorage_3" hideFromEditors="true" selectable="true" selected="false" fileName="../models/USMask.png" useCompression="1" defaultWriteFileExtension="nrrd" readState="0" writeState="0" centerImage="0" UseOrientationFromFile="1" ></VolumeArchetypeStorage>
+ <ModelStorage
+  id="vtkMRMLModelStorageNode4" name="ModelStorage_3" hideFromEditors="true" selectable="true" selected="false" fileName="../models/BiopsyModel.vtk" useCompression="1" defaultWriteFileExtension="vtk" readState="0" writeState="0" coordinateSystem="LPS" ></ModelStorage>
+ <ModelDisplay
+  id="vtkMRMLModelDisplayNode7" name="ModelDisplay_3" hideFromEditors="true" selectable="true" selected="false" color="1 0 0" edgeColor="0 0 0" selectedColor="1 0 0" selectedAmbient="0.4" ambient="0" diffuse="1" selectedSpecular="0.5" specular="0" power="1" opacity="1" sliceIntersectionOpacity="1" pointSize="1" lineWidth="1" representation="2" lighting="true" interpolation="1" shading="true" visibility="true" visibility2D="true" visibility3D="true" edgeVisibility="false" clipping="false" sliceIntersectionThickness="1" frontfaceCulling="false" backfaceCulling="false" scalarVisibility="false" vectorVisibility="false" tensorVisibility="false" interpolateTexture="false" scalarRangeFlag="UseData" scalarRange="0 -1" activeAttributeLocation="point" viewNodeRef="" folderDisplayOverrideAllowed="true" sliceDisplayMode="intersection" thresholdEnabled="false" thresholdRange="0 -1" backfaceColorHSVOffset="-0.05 -0.1 0" ></ModelDisplay>
+ <ModelStorage
+  id="vtkMRMLModelStorageNode5" name="ModelStorage_4" hideFromEditors="true" selectable="true" selected="false" fileName="../models/BiopsyTrajectoryModel.stl" useCompression="1" defaultWriteFileExtension="vtk" readState="0" writeState="0" coordinateSystem="LPS" ></ModelStorage>
+ <ModelDisplay
+  id="vtkMRMLModelDisplayNode8" name="ModelDisplay_4" hideFromEditors="true" selectable="true" selected="false" color="0 1 0" edgeColor="0 0 0" selectedColor="1 0 0" selectedAmbient="0.4" ambient="0" diffuse="1" selectedSpecular="0.5" specular="0" power="1" opacity="1" sliceIntersectionOpacity="0.4" pointSize="1" lineWidth="1" representation="2" lighting="true" interpolation="1" shading="true" visibility="true" visibility2D="true" visibility3D="true" edgeVisibility="false" clipping="false" sliceIntersectionThickness="1" frontfaceCulling="false" backfaceCulling="false" scalarVisibility="false" vectorVisibility="false" tensorVisibility="false" interpolateTexture="false" scalarRangeFlag="UseData" scalarRange="0 -1" activeAttributeLocation="point" viewNodeRef="" folderDisplayOverrideAllowed="true" sliceDisplayMode="intersection" thresholdEnabled="false" thresholdRange="0 -1" backfaceColorHSVOffset="-0.05 -0.1 0" ></ModelDisplay>
+ <ScriptedModule
+  id="vtkMRMLScriptedModuleNode1" name="TrackedTRUSSim_case" hideFromEditors="true" selectable="true" selected="false" attributes="CaseNode:TrackedTRUSSim" ></ScriptedModule>
+ <IGTLConnector
+  id="vtkMRMLIGTLConnectorNode1" name="PlusServerLauncher_Connector" hideFromEditors="false" selectable="true" selected="false" connectorType="CLIENT"  serverHostname="localhost"  serverPort="18904"  persistent="1"  checkCRC="1"  state="1" restrictDeviceName="0"  ></IGTLConnector>
+ <ScriptedModule
+  id="vtkMRMLScriptedModuleNode2" name="TrackedTRUSSim_case" hideFromEditors="true" selectable="true" selected="false" attributes="CaseNode:TrackedTRUSSim" ></ScriptedModule>
+ <ScriptedModule
+  id="vtkMRMLScriptedModuleNode3" name="TrackedTRUSSim_case" hideFromEditors="true" selectable="true" selected="false" attributes="CaseNode:TrackedTRUSSim" ></ScriptedModule>
+ <ScriptedModule
+  id="vtkMRMLScriptedModuleNode4" name="TrackedTRUSSim_case" hideFromEditors="true" selectable="true" selected="false" attributes="CaseNode:TrackedTRUSSim" ></ScriptedModule>
+ <ScriptedModule
+  id="vtkMRMLScriptedModuleNode5" name="TrackedTRUSSim_case" hideFromEditors="true" selectable="true" selected="false" attributes="CaseNode:TrackedTRUSSim" ></ScriptedModule>
+ <ScriptedModule
+  id="vtkMRMLScriptedModuleNode6" name="TrackedTRUSSim_case" hideFromEditors="true" selectable="true" selected="false" attributes="CaseNode:TrackedTRUSSim" ></ScriptedModule>
+ <ScriptedModule
+  id="vtkMRMLScriptedModuleNode7" name="TrackedTRUSSim_case" hideFromEditors="true" selectable="true" selected="false" attributes="CaseNode:TrackedTRUSSim" ></ScriptedModule>
+ <ScriptedModule
+  id="vtkMRMLScriptedModuleNodeRealSenseArUco" name="RealSenseArUco" hideFromEditors="true" selectable="true" selected="false" singletonTag="RealSenseArUco" attributes="ModuleName:RealSenseArUco" references="InputVolume:vtkMRMLScalarVolumeNode1;" parameter0= "edgeBufferSlider 90" parameter1= "markerSizeSpin 60" parameter2= "measurementErrorSpin 10.00" parameter3= "predictionErrorSpin 1.00" parameter4= "sampleSizeSlider 1" parameter5= "saveFilePrefix TrackingData" ></ScriptedModule>
+ <ScriptedModule
+  id="vtkMRMLScriptedModuleNode8" name="TrackedTRUSSim_case" hideFromEditors="true" selectable="true" selected="false" attributes="CaseNode:TrackedTRUSSim" ></ScriptedModule>
+ <ScriptedModule
+  id="vtkMRMLScriptedModuleNode9" name="TrackedTRUSSim_case" hideFromEditors="true" selectable="true" selected="false" attributes="CaseNode:TrackedTRUSSim" ></ScriptedModule>
+</MRML>
