@@ -119,6 +119,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.showZonesCheckbox.connect('stateChanged(int)', self.onShowZonesChecked)
     self.ui.showBiopsyCheckbox.connect('stateChanged(int)', self.onShowBiopsyChecked)
     self.ui.showModelsCheckbox.connect('stateChanged(int)', self.onShowModelsChecked)
+    self.ui.loadCaseButton.connect('clicked(bool)', self.onLoadCase)
     self.ui.saveBiopsyButton.connect('clicked(bool)', self.saveBiopsy)
 
     self.eventFilter = MainWidgetEventFilter(self)
@@ -126,6 +127,9 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     #Populate the users combobox with all folder names in UserData
     self.updateUsersComboBox()
+
+    #Open base models / transforms
+    self.logic.setupParameterNode()
 
     #Ensure that all checkbox states
 
@@ -253,7 +257,10 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.updateBiopsyComboBox()
 
   def onLoadBiopsyButton(self):
-    pass
+    self.logic.loadScene(self.ui.loadBiopsyComboBox.currentText, self.ui.userComboBox.currentText)
+
+  def onLoadCase(self):
+    self.logic.setupCase(self.ui.caseComboBox.currentIndex)
 
   def onShowModelsChecked(self):
     pass
@@ -263,6 +270,9 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def saveBiopsy(self):
     self.logic.saveScene(self.ui.biopsyNameLineEdit.text, self.ui.userComboBox.currentText)
+
+    #update load biopsy combo box
+    self.updateBiopsyComboBox()
 
   def onMoveBiopsy(self):
 
@@ -365,6 +375,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
   def saveScene(self, filename, currentUser):
 
+    filename = filename + ".mrml"
+
     #only save the scene if a case is loaded
     if self.caseLoaded:
 
@@ -374,13 +386,26 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
       #Append to current directory
       moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
-      biopsySavePath = os.path.join(moduleDir, "Resources", "SavedData", currentUser, filename)
+      biopsySavePath = os.path.join(moduleDir, "Resources", "UserData", currentUser, filename)
 
       print("save path: " + biopsySavePath)
 
       #save the scene to file
       slicer.util.saveScene(biopsySavePath)
 
+
+  def loadScene(self, filename, currentUser):
+
+    print("filename: " + filename)
+
+    # Append to current directory
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+    biopsySavePath = os.path.join(moduleDir, "Resources", "UserData", currentUser, filename)
+
+    print("biopsySavePath: " + biopsySavePath)
+
+    # save the scene to file
+    slicer.util.loadScene(biopsySavePath)
 
   #Redefine createParameterNode method.
   #This method is used to create a parameter node that will not be saved with the scene, and will
@@ -424,7 +449,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       numberOfScriptedModuleNodes =  slicer.mrmlScene.GetNumberOfNodesByClass("vtkMRMLScriptedModuleNode")
       for nodeIndex in range(numberOfScriptedModuleNodes):
         node  = slicer.mrmlScene.GetNthNodeByClass( nodeIndex, "vtkMRMLScriptedModuleNode" )
-        if node.GetAttribute("ModuleName") == self.moduleName and node.GetName() == self.moduleName + "_case":
+        if node.GetName() == self.moduleName + "_case":
           return node
 
     else:
@@ -531,14 +556,14 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     BiopsyModelToBiopsyTrajectory = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_BIOPSYTRAJECTORY)
     biopsyTransformRolesNode = caseNode.GetParameter(self.BIOPSY_TRANSFORM_ROLES)
 
-    print("biopsy transform roles node: " + str(biopsyTransformRolesNode))
+    # print("biopsy transform roles node: " + str(biopsyTransformRolesNode))
 
     #Load all previous biopsy names
     biopsyTransformRoles = []
     if biopsyTransformRolesNode is not '':
       biopsyTransformRoles = json.loads(biopsyTransformRolesNode)
 
-    print("biopsyTransformRoles: " + str(biopsyTransformRoles))
+    # print("biopsyTransformRoles: " + str(biopsyTransformRoles))
 
     #Name the current one
     currBiopsyRole = "BiopsyModelToReference_" + str(len(biopsyTransformRoles))
@@ -570,8 +595,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     biopsyTransformRolesNode = caseNode.GetParameter(self.BIOPSY_TRANSFORM_ROLES)
 
-    print("new biopsyTRansformRoles" + biopsyTransformRoles)
-    print("New transform roles node: " + str(biopsyTransformRoles))
+    # print("new biopsyTRansformRoles" + biopsyTransformRoles)
+    # print("New transform roles node: " + str(biopsyTransformRoles))
 
     #Reset the value of BiopsyModelToBiopsyTrajectory after saving it
     self.moveBiopsy(0)
@@ -871,6 +896,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     parameterNode = self.getParameterNode()
     caseNode = self.getCaseNode()
+
+    print("casenode: ")
 
     moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
 
