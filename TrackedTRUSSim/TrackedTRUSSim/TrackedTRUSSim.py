@@ -103,6 +103,9 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.layout.addWidget(uiWidget)
     self.ui = slicer.util.childWidgetVariables(uiWidget)
 
+    #Get the path to module resources
+    self.moduleDirPath = slicer.modules.trackedtrussim.path.replace("TrackedTRUSSim.py","")
+
     #Set scene in MRML widgets
     uiWidget.setMRMLScene(slicer.mrmlScene)
 
@@ -116,10 +119,10 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.biopsyDepthSlider.connect('valueChanged(double)', self.onMoveBiopsy)
     self.ui.customUIButton.connect('toggled(bool)', self.onCustomUIToggled)
     self.ui.fireBiopsyButton.connect('clicked(bool)', self.onFireBiopsyClicked)
-    self.ui.showZonesCheckbox.connect('stateChanged(int)', self.onShowZonesChecked)
-    self.ui.showBiopsyCheckbox.connect('stateChanged(int)', self.onShowBiopsyChecked)
-    self.ui.showModelsCheckbox.connect('stateChanged(int)', self.onShowModelsChecked)
-    self.ui.loadCaseButton.connect('clicked(bool)', self.onLoadCase)
+    # self.ui.showZonesCheckbox.connect('stateChanged(int)', self.onShowZonesChecked)
+    # self.ui.showBiopsyCheckbox.connect('stateChanged(int)', self.onShowBiopsyChecked)
+    # self.ui.showModelsCheckbox.connect('stateChanged(int)', self.onShowModelsChecked)
+    # self.ui.loadCaseButton.connect('clicked(bool)', self.onLoadCase)
     self.ui.saveBiopsyButton.connect('clicked(bool)', self.saveBiopsy)
 
     self.eventFilter = MainWidgetEventFilter(self)
@@ -131,7 +134,77 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #Open base models / transforms
     self.logic.setupParameterNode()
 
+    #Setup icons
+    self.placeIcons()
+
     #Ensure that all checkbox states
+
+  def placeIcons(self):
+
+    #Settings
+    settingsIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/Settings.png')
+    self.ui.customUIButton.setIcon(settingsIcon)
+
+    #User
+    userIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/User.png')
+    self.ui.userCollapsibleButton.setIcon(userIcon)
+
+    #Plus
+    addUserIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/AddUser.png')
+    self.ui.createUserButton.setIcon(addUserIcon)
+
+    #Save
+    saveFileIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/Save.png')
+    self.ui.saveBiopsyButton.setIcon(saveFileIcon)
+
+    ########
+    #New case section
+
+    #Case Number Label
+    numberIcon = qt.QPixmap(self.moduleDirPath + '/Resources/Icons/Pound.png')
+    self.ui.poundLabel.setPixmap(numberIcon)
+
+    #Play Button
+    playIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/Play.png')
+    self.ui.playPauseButton.setIcon(playIcon)
+
+    #Stop Button
+    stopIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/Stop.png')
+    self.ui.stopButton.setIcon(stopIcon)
+
+    #Biopsy Depth Label
+    measurementIcon = qt.QPixmap(self.moduleDirPath + '/Resources/Icons/Measure.png')
+    self.ui.biopsyDepthLabel.setPixmap(measurementIcon)
+
+    #Stop Button
+    fireBiopsyIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/Place.png')
+    self.ui.fireBiopsyButton.setIcon(fireBiopsyIcon)
+
+    ########
+    #New case section
+
+    #Load Biopsy Button
+    loadBiopsyIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/Review.png')
+    self.ui.loadBiopsyButton.setIcon(loadBiopsyIcon)
+
+    ########
+    #View Control Section
+
+    #View Toggle Button 1
+    loadBiopsyIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/VisibilityOn.png')
+    self.ui.viewToggleButton_1.setIcon(loadBiopsyIcon)
+
+    #View Toggle Button 2
+    self.ui.viewToggleButton_2.setIcon(loadBiopsyIcon)
+
+    #View Toggle Button 3
+    self.ui.viewToggleButton_3.setIcon(loadBiopsyIcon)
+
+    ########
+
+    #New Biopsy Tab Icon
+    newBiopsyIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/NewFile.png')
+    self.ui.tab.setWindowIcon(newBiopsyIcon) ##
 
   def createNewUserDialog(self):
 
@@ -261,6 +334,8 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onLoadCase(self):
     self.logic.setupCase(self.ui.caseComboBox.currentIndex)
+
+    self.onShowZonesChecked()
 
   def onShowModelsChecked(self):
     pass
@@ -586,7 +661,9 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     #Change the colour
     biopsyDispNode = biopsyModel.GetDisplayNode()
-    biopsyDispNode.SetColor(0,0.5,0)
+    biopsyDispNode.SetColor(1,0.5,0)
+    biopsyDispNode.SliceIntersectionVisibilityOn()
+    biopsyDispNode.SetSliceIntersectionOpacity(0.8)
 
     #Update the list of transform IDs
     biopsyTransformRoles = biopsyTransformRoles + [currBiopsyRole]
@@ -766,7 +843,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     #Show the intersection between the biopsy and the red slice
     biopsyTrajectoryDispNode = biopsyTrajectoryModel.GetDisplayNode()
     biopsyTrajectoryDispNode.SliceIntersectionVisibilityOn()
-    biopsyTrajectoryDispNode.SetSliceIntersectionOpacity(0.4)
+    biopsyTrajectoryDispNode.SetSliceIntersectionOpacity(0.8)
     biopsyTrajectoryDispNode.SetColor(0,1,0)
 
   def setupResliceDriver(self):
@@ -940,6 +1017,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     slicer.mrmlScene.RemoveNode(labelmapVolumeNode)
     segDisplay = seg.GetDisplayNode()
     segDisplay.SetVisibility(False)
+    segDisplay.SetOpacity(0.3)
     caseNode.SetNodeReferenceID(self.ZONE_SEGMENTATION, seg.GetID())
 
     seg.SetAndObserveTransformNodeID(trusToCylinder.GetID())
