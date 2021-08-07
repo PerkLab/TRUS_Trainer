@@ -9,9 +9,13 @@ from slicer.util import VTKObservationMixin
 import ScreenCapture
 import numpy as np
 from vtk.util.numpy_support import vtk_to_numpy
+from vtk.util import numpy_support
 from datetime import datetime
 from glob import glob
 from pathlib import Path
+
+import ScreenCapture
+import cv2
 
 #
 # TrackedTRUSSim
@@ -119,11 +123,13 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.biopsyDepthSlider.connect('valueChanged(double)', self.onMoveBiopsy)
     self.ui.customUIButton.connect('toggled(bool)', self.onCustomUIToggled)
     self.ui.fireBiopsyButton.connect('clicked(bool)', self.onFireBiopsyClicked)
-    # self.ui.showZonesCheckbox.connect('stateChanged(int)', self.onShowZonesChecked)
-    # self.ui.showBiopsyCheckbox.connect('stateChanged(int)', self.onShowBiopsyChecked)
-    # self.ui.showModelsCheckbox.connect('stateChanged(int)', self.onShowModelsChecked)
-    # self.ui.loadCaseButton.connect('clicked(bool)', self.onLoadCase)
+    self.ui.caseComboBox.currentIndexChanged.connect(self.onCaseComboBoxChanged)
+    self.ui.segVisButton.connect('clicked(bool)', self.createNewUserDialog)
+    self.ui.biopsyVisButton.connect('clicked(bool)', self.createNewUserDialog)
+    self.ui.toolVisButton.connect('clicked(bool)', self.createNewUserDialog)
     self.ui.saveBiopsyButton.connect('clicked(bool)', self.saveBiopsy)
+    self.ui.startReconstructionButton.connect('clicked(bool)', self.onStartReconstruction)
+    self.ui.stopReconstructionButton.connect('clicked(bool)', self.onStopReconstruction)
 
     self.eventFilter = MainWidgetEventFilter(self)
     slicer.util.mainWindow().installEventFilter(self.eventFilter)
@@ -191,14 +197,14 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #View Control Section
 
     #View Toggle Button 1
-    loadBiopsyIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/VisibilityOn.png')
-    self.ui.viewToggleButton_1.setIcon(loadBiopsyIcon)
-
-    #View Toggle Button 2
-    self.ui.viewToggleButton_2.setIcon(loadBiopsyIcon)
-
-    #View Toggle Button 3
-    self.ui.viewToggleButton_3.setIcon(loadBiopsyIcon)
+    self.visOnIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/VisibilityOn.png')
+    self.visOffIcon = qt.QIcon(self.moduleDirPath + '/Resources/Icons/VisibilityOff.png')
+    self.ui.segVisButton.setIcon(self.visOnIcon)
+    self.ui.biopsyVisButton.setIcon(self.visOnIcon)
+    self.ui.toolVisButton.setIcon(self.visOnIcon)
+    self.segVisState = True
+    self.biopsyVisState = True
+    self.toolVisState = True
 
     ########
 
@@ -326,6 +332,10 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # load the appropriate transforms
     self.logic.setupCase(case)
 
+    #Refresh the view toggle buttons
+    self.onSegVisButton()
+    self.onBiopsyVisButton()
+
   def onUserComboBoxChanged(self):
     self.updateBiopsyComboBox()
 
@@ -337,10 +347,21 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.onShowZonesChecked()
 
-  def onShowModelsChecked(self):
+  def onSegVisButton(self):
+
+    self.segVisState = not self.segVisState
+
+    self.logic.changeZoneVisibility(self.segVisState)
+
+    if self.segVisState:
+      self.ui.segVisButton.setIcon(self.visOnIcon)
+    else:
+      self.ui.segVisButton.setIcon(self.visOffIcon)
+
+  def onBiopsyVisButton(self):
     pass
 
-  def onShowBiopsyChecked(self):
+  def onToolVisButton(self):
     pass
 
   def saveBiopsy(self):
@@ -363,12 +384,14 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.ui.biopsyDepthSlider.value = 0
 
+  def onStartReconstruction(self):
 
-  def onShowZonesChecked(self):
+    self.logic.startReconstruction()
 
-    showZonesState = self.ui.showZonesCheckbox.checked
+  def onStopReconstruction(self):
 
-    self.logic.changeZoneVisibility(showZonesState)
+    self.logic.stopReconstruction()
+
 
   def confirmExit(self):
     msgBox = qt.QMessageBox()
@@ -436,6 +459,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
   #Various other node names
   BIOPSY_TRANSFORM_ROLES = "BiopsyTransformRoles"
+  ULTRASOUND_SIM_VOLUME = "UltrasoundSimVolume"
 
 
   def __init__(self):
@@ -481,6 +505,97 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     # save the scene to file
     slicer.util.loadScene(biopsySavePath)
+
+  def stopReconstruction(self):
+
+    #Parameter node
+    parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
+
+    #Remove the listener from the tracking data
+    probeToPhantom = parameterNode.GetNodeReference(self.PROBE_TO_PHANTOM)
+    probeToPhantom.RemoveObserver(probeToPhantom.TransformModifiedEvent)
+
+  def startReconstruction(self):
+
+    #Parameter node
+    parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
+
+    # Start by hiding intersecting volumes and slice view annotations
+    # Disable slice annotations immediately
+    sliceAnnotations = slicer.modules.DataProbeInstance.infoWidget.sliceAnnotations
+    sliceAnnotations.sliceViewAnnotationsEnabled = False
+    sliceAnnotations.updateSliceViewFromGUI()
+
+    # Hide the trajectory and biopsy location
+    biopsyModel = slicer.mrmlScene.GetFirstNodeByName(self.BIOPSY_MODEL)
+    biopsyDispNode = biopsyModel.GetDisplayNode()
+    biopsyDispNode.SliceIntersectionVisibilityOff()
+
+    # Hide the trajectory and biopsy location
+    biopsyTrajectoryModel = slicer.mrmlScene.GetFirstNodeByName(self.BIOPSY_TRAJECTORY_MODEL)
+    biopsyTrajectoryDispNode = biopsyTrajectoryModel.GetDisplayNode()
+    biopsyTrajectoryDispNode.SliceIntersectionVisibilityOff()
+
+    #Instantiate screencapture logic
+    self.screencapLogic = ScreenCapture.ScreenCaptureLogic()
+
+    # Create a new blank volume if it doesn't already exist
+    ultrasoundSimVolume = parameterNode.GetNodeReference(self.ULTRASOUND_SIM_VOLUME)
+    if ultrasoundSimVolume is None:
+      imageSize = [601, 717, 1]
+      voxelType = vtk.VTK_UNSIGNED_CHAR
+      imageOrigin = [0, 0, 0]
+      imageSpacing = [0.1220, 0.1220, 0.1220]
+      imageDirections = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+      fillVoxelValue = 0
+
+      # Create an empty image volume, filled with fillVoxelValue
+      imageData = vtk.vtkImageData()
+      imageData.SetDimensions(imageSize)
+      imageData.AllocateScalars(voxelType, 1)
+      imageData.GetPointData().GetScalars().Fill(fillVoxelValue)
+
+      # Create volume node
+      ultrasoundSimVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.ULTRASOUND_SIM_VOLUME)
+      ultrasoundSimVolume.SetOrigin(imageOrigin)
+      ultrasoundSimVolume.SetSpacing(imageSpacing)
+      ultrasoundSimVolume.SetIJKToRASDirections(imageDirections)
+      ultrasoundSimVolume.SetAndObserveImageData(imageData)
+      ultrasoundSimVolume.CreateDefaultDisplayNodes()
+      ultrasoundSimVolume.CreateDefaultStorageNode()
+
+      #Add to parameter node
+      parameterNode.SetNodeReferenceID(self.ULTRASOUND_SIM_VOLUME, ultrasoundSimVolume.GetID())
+
+    #Add a listener to the tracking data
+    probeToPhantom = parameterNode.GetNodeReference(self.PROBE_TO_PHANTOM)
+
+    probeToPhantom.AddObserver(probeToPhantom.TransformModifiedEvent, self.reconstructionCallback)
+
+
+  def reconstructionCallback(self,caller, eventId):
+
+    #Parameter node
+    parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
+
+    #Get the current contents of the red slice view
+    redSliceView = self.screencapLogic.viewFromNode(slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeRed'))
+    im = qt.QPixmap.grabWidget(redSliceView).toImage()
+
+    width, height = im.width(), im.height()
+    img_np = np.array(im.constBits()).reshape(height, width, 4)
+    grayscale = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
+    cv2.imshow("TEST", grayscale)
+    vtkGrayscale = numpy_support.numpy_to_vtk(grayscale.ravel(), deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
+
+    #Convert the image to vtkImageData object
+    sliceImageData = vtk.vtkImageData()
+    sliceImageData.GetPointData().SetScalars(vtkGrayscale)
+
+    #Write this image data to the volume node
+    ultrasoundSimVolume = parameterNode.GetNodeReference(self.ULTRASOUND_SIM_VOLUME)
+    ultrasoundSimVolume.SetAndObserveImageData(sliceImageData)
+
 
   #Redefine createParameterNode method.
   #This method is used to create a parameter node that will not be saved with the scene, and will
@@ -1083,6 +1198,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
+
 
 #
 # TrackedTRUSSimTest

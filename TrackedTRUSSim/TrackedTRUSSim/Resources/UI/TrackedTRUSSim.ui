@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>380</width>
+    <width>405</width>
     <height>666</height>
    </rect>
   </property>
@@ -48,7 +48,7 @@
       <item>
        <widget class="QTabWidget" name="tabWidget">
         <property name="currentIndex">
-         <number>0</number>
+         <number>2</number>
         </property>
         <widget class="QWidget" name="tab">
          <attribute name="title">
@@ -114,6 +114,13 @@
                </widget>
               </item>
               <item>
+               <widget class="Line" name="line_5">
+                <property name="orientation">
+                 <enum>Qt::Vertical</enum>
+                </property>
+               </widget>
+              </item>
+              <item>
                <widget class="Line" name="line_4">
                 <property name="orientation">
                  <enum>Qt::Vertical</enum>
@@ -135,6 +142,13 @@
                </widget>
               </item>
              </layout>
+            </item>
+            <item>
+             <widget class="Line" name="line_2">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+             </widget>
             </item>
             <item>
              <layout class="QHBoxLayout" name="horizontalLayout_7">
@@ -253,6 +267,27 @@
           </item>
          </layout>
         </widget>
+        <widget class="QWidget" name="volumeReconstructionTab">
+         <attribute name="title">
+          <string>Volume Reconstruction</string>
+         </attribute>
+         <layout class="QFormLayout" name="formLayout">
+          <item row="0" column="0">
+           <widget class="QPushButton" name="startReconstructionButton">
+            <property name="text">
+             <string>Start Reconstruction</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QPushButton" name="stopReconstructionButton">
+            <property name="text">
+             <string>Stop Reconstruction</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
        </widget>
       </item>
      </layout>
@@ -267,7 +302,7 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_8">
         <item>
-         <widget class="QPushButton" name="viewToggleButton_1">
+         <widget class="QPushButton" name="segVisButton">
           <property name="text">
            <string/>
           </property>
@@ -298,7 +333,7 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_9">
         <item>
-         <widget class="QPushButton" name="viewToggleButton_2">
+         <widget class="QPushButton" name="biopsyVisButton">
           <property name="text">
            <string/>
           </property>
@@ -329,7 +364,7 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_10">
         <item>
-         <widget class="QPushButton" name="viewToggleButton_3">
+         <widget class="QPushButton" name="toolVisButton">
           <property name="text">
            <string/>
           </property>
