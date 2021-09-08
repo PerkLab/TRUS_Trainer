@@ -434,6 +434,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   USMASK_TO_PROBEMODEL = "USMaskToProbeModel"
   BIOPSYTRAJECTORY_TO_PROBEMODEL = "BiopsyTrajectoryToProbeModel"
   BIOPSYMODEL_TO_BIOPSYTRAJECTORY = "BiopsyModelToBiopsyTrajectory"
+  USSIMVOLUME_TO_USMASK = "USSimVolumeToUSMask"
 
   #PLUS related transforms
   POINTER_TO_PHANTOM = "PointerToPhantom"
@@ -517,6 +518,9 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
   def startReconstruction(self):
 
+    #Get the current directory
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+
     #Parameter node
     parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
 
@@ -545,7 +549,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       imageSize = [601, 717, 1]
       voxelType = vtk.VTK_UNSIGNED_CHAR
       imageOrigin = [0, 0, 0]
-      imageSpacing = [0.1220, 0.1220, 0.1220]
+      imageSpacing = [0.55, 0.55, 0.55]
       imageDirections = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
       fillVoxelValue = 0
 
@@ -569,8 +573,41 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     #Add a listener to the tracking data
     probeToPhantom = parameterNode.GetNodeReference(self.PROBE_TO_PHANTOM)
-
     probeToPhantom.AddObserver(probeToPhantom.TransformModifiedEvent, self.reconstructionCallback)
+
+    #Confirm that USSimVolumeToUSMask is added to scene; if not, add it
+    USMaskToProbeModel = parameterNode.GetNodeReference(self.USMASK_TO_PROBEMODEL)
+    USSimVolumeToUSMask = parameterNode.GetNodeReference(self.USSIMVOLUME_TO_USMASK)
+
+    if USSimVolumeToUSMask is None:
+      USSimVolumeToUSMaskPath = os.path.join(moduleDir, "Resources", "transforms", "USSimVolumeToUSMask.h5")
+      USSimVolumeToUSMask = slicer.util.loadTransform(USSimVolumeToUSMaskPath)
+      parameterNode.SetNodeReferenceID(self.USSIMVOLUME_TO_USMASK, USSimVolumeToUSMask.GetID())
+      USSimVolumeToUSMask.SetSaveWithScene(False)
+
+      #Since it is new to the scene, add the SimVolume to this transform
+      ultrasoundSimVolume.SetAndObserveTransformNodeID(USSimVolumeToUSMask.GetID())
+
+    #Add the transform to the overall hierarchy
+    USSimVolumeToUSMask.SetAndObserveTransformNodeID(USMaskToProbeModel.GetID())
+
+    #Set the yellow slice to show the volume version of the slice
+    layoutManager = slicer.app.layoutManager()
+    compositeNode = layoutManager.sliceWidget("Yellow").sliceLogic().GetSliceCompositeNode()
+    compositeNode.SetBackgroundVolumeID(ultrasoundSimVolume.GetID())
+
+    #Get the reslice logic class and drive the yellow slice with the USSimVolume
+    resliceLogic = slicer.modules.volumereslicedriver.logic()
+    yellowSliceNode = slicer.app.layoutManager().sliceWidget("Yellow").mrmlSliceNode()
+
+    #Set the mask as the driver and set the mode to transverse
+    resliceLogic.SetDriverForSlice(ultrasoundSimVolume.GetID(), yellowSliceNode)
+    resliceLogic.SetModeForSlice(resliceLogic.MODE_TRANSVERSE, yellowSliceNode)
+
+    #Hide the red slice in 3D and show the yellow slice
+    redSliceNode = slicer.app.layoutManager().sliceWidget("Red").mrmlSliceNode()
+    yellowSliceNode.SetSliceVisible(True)
+    redSliceNode.SetSliceVisible(False)
 
 
   def reconstructionCallback(self,caller, eventId):
@@ -585,11 +622,16 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     width, height = im.width(), im.height()
     img_np = np.array(im.constBits()).reshape(height, width, 4)
     grayscale = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
+    # grayscale = cv2.resize(grayscale, (800, 800))
     cv2.imshow("TEST", grayscale)
     vtkGrayscale = numpy_support.numpy_to_vtk(grayscale.ravel(), deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
 
     #Convert the image to vtkImageData object
     sliceImageData = vtk.vtkImageData()
+    # sliceImageData.SetScalarTypeToUnsignedChar()
+    sliceImageData.SetDimensions(width, height, 1)
+    sliceImageData.SetOrigin(0.0, 0.0, 0.0)
+    sliceImageData.SetSpacing(800/width, 800/height, 1.0)
     sliceImageData.GetPointData().SetScalars(vtkGrayscale)
 
     #Write this image data to the volume node
