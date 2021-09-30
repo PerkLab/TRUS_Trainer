@@ -609,6 +609,25 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     yellowSliceNode.SetSliceVisible(True)
     redSliceNode.SetSliceVisible(False)
 
+    # #Zoom in on the yellow slice to 50%
+    #
+    # newZoomPercent = 400
+    #
+    # # volumeNode = slicer.util.getNode('MRHead')
+    # volumeNode = slicer.util.getNode('MaskVolume')
+    # volumeSpacingMmPerPixel = volumeNode.GetSpacing()
+    # imageData = volumeNode.GetImageData()
+    # imageDimensionsPixel = imageData.GetDimensions()
+    #
+    # yellowSliceFovMm = yellowSliceNode.GetFieldOfView()  # Current FOV contains aspect ratio
+    # aspectRatioY = yellowSliceFovMm[1] / yellowSliceFovMm[0]
+    # imageWidthMm = imageDimensionsPixel[0] * volumeSpacingMmPerPixel[0]
+    #
+    # # Set new zoom
+    #
+    # newSliceWidthMm = 100 * imageWidthMm / newZoomPercent
+    # yellowSliceNode.SetFieldOfView(newSliceWidthMm, newSliceWidthMm * aspectRatioY, yellowSliceFovMm[2])
+
 
   def reconstructionCallback(self,caller, eventId):
 
@@ -623,7 +642,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     img_np = np.array(im.constBits()).reshape(height, width, 4)
     grayscale = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
     # grayscale = cv2.resize(grayscale, (800, 800))
-    cv2.imshow("TEST", grayscale)
+    # cv2.imshow("TEST", grayscale)
     vtkGrayscale = numpy_support.numpy_to_vtk(grayscale.ravel(), deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
 
     #Convert the image to vtkImageData object
