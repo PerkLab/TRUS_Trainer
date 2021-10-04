@@ -423,17 +423,14 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   """
 
   # Transform names
-  REFERENCE_TO_RAS = "ReferenceToRAS"
   BOXMODEL_TO_REFERENCE = "BoxModelToReference"
   CYLINDER_TO_BOX = "CylinderToBox"
-  TRUS_TO_CYLINDER = "TRUSToCylinder"
-  PHANTOM_TO_REFERENCE = "PhantomToReference"
   PROBE_TO_PHANTOM = "ProbeToPhantom"
-  PROBETIP_TO_PROBE = "ProbeTipToProbe"
-  PROBEMODEL_TO_PROBETIP = "ProbeModelToProbeTip"
-  USMASK_TO_PROBEMODEL = "USMaskToProbeModel"
+  PHANTOM_TO_RAS = "PhantomToRAS"
+  PROBEMODEL_TO_PROBE = "ProbeModelToProbe"
   BIOPSYTRAJECTORY_TO_PROBEMODEL = "BiopsyTrajectoryToProbeModel"
   BIOPSYMODEL_TO_BIOPSYTRAJECTORY = "BiopsyModelToBiopsyTrajectory"
+  IMAGE_TO_PROBE = "ImageToProbe"
   USSIMVOLUME_TO_USMASK = "USSimVolumeToUSMask"
 
   #PLUS related transforms
@@ -576,7 +573,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     probeToPhantom.AddObserver(probeToPhantom.TransformModifiedEvent, self.reconstructionCallback)
 
     #Confirm that USSimVolumeToUSMask is added to scene; if not, add it
-    USMaskToProbeModel = parameterNode.GetNodeReference(self.USMASK_TO_PROBEMODEL)
+    ImageToProbe = parameterNode.GetNodeReference(self.IMAGE_TO_PROBE)
     USSimVolumeToUSMask = parameterNode.GetNodeReference(self.USSIMVOLUME_TO_USMASK)
 
     if USSimVolumeToUSMask is None:
@@ -589,7 +586,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       ultrasoundSimVolume.SetAndObserveTransformNodeID(USSimVolumeToUSMask.GetID())
 
     #Add the transform to the overall hierarchy
-    USSimVolumeToUSMask.SetAndObserveTransformNodeID(USMaskToProbeModel.GetID())
+    USSimVolumeToUSMask.SetAndObserveTransformNodeID(ImageToProbe.GetID())
 
     #Set the yellow slice to show the volume version of the slice
     layoutManager = slicer.app.layoutManager()
@@ -967,8 +964,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       probeModel.SetName(self.PROBE_MODEL)
       parameterNode.SetNodeReferenceID(self.PROBE_MODEL, probeModel.GetID())
 
-    probeToBox = parameterNode.GetNodeReference(self.PROBEMODEL_TO_PROBETIP)
-    probeModel.SetAndObserveTransformNodeID(probeToBox.GetID())
+    probeModelToProbe = parameterNode.GetNodeReference(self.PROBEMODEL_TO_PROBE)
+    probeModel.SetAndObserveTransformNodeID(probeModelToProbe.GetID())
     probeModel.SetSaveWithScene(False)
 
     USMaskVolume = parameterNode.GetNodeReference(self.MASK_VOLUME)
@@ -978,8 +975,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       USMaskVolume.SetName(self.MASK_VOLUME)
       parameterNode.SetNodeReferenceID(self.MASK_VOLUME, USMaskVolume.GetID())
 
-    USMaskToProbeModel = parameterNode.GetNodeReference(self.USMASK_TO_PROBEMODEL)
-    USMaskVolume.SetAndObserveTransformNodeID(USMaskToProbeModel.GetID())
+    imageToProbe = parameterNode.GetNodeReference(self.IMAGE_TO_PROBE)
+    USMaskVolume.SetAndObserveTransformNodeID(imageToProbe.GetID())
     USMaskVolume.SetSaveWithScene(False)
 
     #Get the US Mask display node
@@ -1048,19 +1045,19 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
 
-    referenceToRas = parameterNode.GetNodeReference(self.REFERENCE_TO_RAS)
-    if referenceToRas is None:
-      referenceToRas = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.REFERENCE_TO_RAS)
-      parameterNode.SetNodeReferenceID(self.REFERENCE_TO_RAS, referenceToRas.GetID())
-      referenceToRas.SetSaveWithScene(False)
-
     boxModelToReference = parameterNode.GetNodeReference(self.BOXMODEL_TO_REFERENCE)
     if boxModelToReference is None:
       boxModelToReferencePath = os.path.join(moduleDir, "Resources", "transforms", "BoxModelToReference.h5")
       boxModelToReference = slicer.util.loadTransform(boxModelToReferencePath)
       parameterNode.SetNodeReferenceID(self.BOXMODEL_TO_REFERENCE, boxModelToReference.GetID())
       boxModelToReference.SetSaveWithScene(False)
-    boxModelToReference.SetAndObserveTransformNodeID(referenceToRas.GetID())
+
+    phantomToRAS = parameterNode.GetNodeReference(self.PHANTOM_TO_RAS)
+    if phantomToRAS is None:
+      phantomToRASPath = os.path.join(moduleDir, "Resources", "transforms", "PhantomToRAS.h5")
+      phantomToRAS = slicer.util.loadTransform(phantomToRASPath)
+      parameterNode.SetNodeReferenceID(self.PHANTOM_TO_RAS, phantomToRAS.GetID())
+      phantomToRAS.SetSaveWithScene(False)
 
     cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
     if cylinderToBox is None:
@@ -1070,13 +1067,13 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       cylinderToBox.SetSaveWithScene(False)
     cylinderToBox.SetAndObserveTransformNodeID(boxModelToReference.GetID())
 
-    phantomToReference = parameterNode.GetNodeReference(self.PHANTOM_TO_REFERENCE)
-    if phantomToReference is None:
-      phantomToReferencePath = os.path.join(moduleDir, "Resources", "transforms", "PhantomToReference.h5")
-      phantomToReference = slicer.util.loadTransform(phantomToReferencePath)
-      parameterNode.SetNodeReferenceID(self.PHANTOM_TO_REFERENCE, phantomToReference.GetID())
-      phantomToReference.SetSaveWithScene(False)
-    phantomToReference.SetAndObserveTransformNodeID(referenceToRas.GetID())
+    # phantomToReference = parameterNode.GetNodeReference(self.PHANTOM_TO_REFERENCE)
+    # if phantomToReference is None:
+    #   phantomToReferencePath = os.path.join(moduleDir, "Resources", "transforms", "PhantomToReference.h5")
+    #   phantomToReference = slicer.util.loadTransform(phantomToReferencePath)
+    #   parameterNode.SetNodeReferenceID(self.PHANTOM_TO_REFERENCE, phantomToReference.GetID())
+    #   phantomToReference.SetSaveWithScene(False)
+    # phantomToReference.SetAndObserveTransformNodeID(referenceToRas.GetID())
 
     probeToPhantom = parameterNode.GetNodeReference(self.PROBE_TO_PHANTOM)
     if probeToPhantom is None:
@@ -1084,31 +1081,39 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       probeToPhantom = slicer.util.loadTransform(probeToPhantomPath)
       parameterNode.SetNodeReferenceID(self.PROBE_TO_PHANTOM, probeToPhantom.GetID())
       probeToPhantom.SetSaveWithScene(False)
-    probeToPhantom.SetAndObserveTransformNodeID(phantomToReference.GetID())
+    probeToPhantom.SetAndObserveTransformNodeID(phantomToRAS.GetID())
 
-    probeTipToProbe = parameterNode.GetNodeReference(self.PROBETIP_TO_PROBE)
-    if probeTipToProbe is None:
-      probeTipToProbePath = os.path.join(moduleDir, "Resources", "transforms", "ProbeTipToProbe.h5")
-      probeTipToProbe = slicer.util.loadTransform(probeTipToProbePath)
-      parameterNode.SetNodeReferenceID(self.PROBETIP_TO_PROBE, probeTipToProbe.GetID())
-      probeTipToProbe.SetSaveWithScene(False)
-    probeTipToProbe.SetAndObserveTransformNodeID(probeToPhantom.GetID())
+    # probeTipToProbe = parameterNode.GetNodeReference(self.PROBETIP_TO_PROBE)
+    # if probeTipToProbe is None:
+    #   probeTipToProbePath = os.path.join(moduleDir, "Resources", "transforms", "ProbeTipToProbe.h5")
+    #   probeTipToProbe = slicer.util.loadTransform(probeTipToProbePath)
+    #   parameterNode.SetNodeReferenceID(self.PROBETIP_TO_PROBE, probeTipToProbe.GetID())
+    #   probeTipToProbe.SetSaveWithScene(False)
+    # probeTipToProbe.SetAndObserveTransformNodeID(probeToPhantom.GetID())
 
-    probeModelToProbeTip = parameterNode.GetNodeReference(self.PROBEMODEL_TO_PROBETIP)
-    if probeModelToProbeTip is None:
-      probeModelToProbeTipPath = os.path.join(moduleDir, "Resources", "transforms", "ProbeModelToProbeTip.h5")
-      probeModelToProbeTip = slicer.util.loadTransform(probeModelToProbeTipPath)
-      parameterNode.SetNodeReferenceID(self.PROBEMODEL_TO_PROBETIP, probeModelToProbeTip.GetID())
-      probeModelToProbeTip.SetSaveWithScene(False)
-    probeModelToProbeTip.SetAndObserveTransformNodeID(probeTipToProbe.GetID())
+    # probeModelToProbeTip = parameterNode.GetNodeReference(self.PROBEMODEL_TO_PROBETIP)
+    # if probeModelToProbeTip is None:
+    #   probeModelToProbeTipPath = os.path.join(moduleDir, "Resources", "transforms", "ProbeModelToProbeTip.h5")
+    #   probeModelToProbeTip = slicer.util.loadTransform(probeModelToProbeTipPath)
+    #   parameterNode.SetNodeReferenceID(self.PROBEMODEL_TO_PROBETIP, probeModelToProbeTip.GetID())
+    #   probeModelToProbeTip.SetSaveWithScene(False)
+    # probeModelToProbeTip.SetAndObserveTransformNodeID(probeTipToProbe.GetID())
 
-    USMaskToProbeModel = parameterNode.GetNodeReference(self.USMASK_TO_PROBEMODEL)
-    if USMaskToProbeModel is None:
-      USMaskToProbeModelPath = os.path.join(moduleDir, "Resources", "transforms", "USMaskToProbeModel.h5")
-      USMaskToProbeModel = slicer.util.loadTransform(USMaskToProbeModelPath)
-      parameterNode.SetNodeReferenceID(self.USMASK_TO_PROBEMODEL, USMaskToProbeModel.GetID())
-      USMaskToProbeModel.SetSaveWithScene(False)
-    USMaskToProbeModel.SetAndObserveTransformNodeID(probeModelToProbeTip.GetID())
+    probeModelToProbe = parameterNode.GetNodeReference(self.PROBEMODEL_TO_PROBE)
+    if probeModelToProbe is None:
+      probeModelToProbePath = os.path.join(moduleDir, "Resources", "transforms", "ProbeModelToProbe.h5")
+      probeModelToProbe = slicer.util.loadTransform(probeModelToProbePath)
+      parameterNode.SetNodeReferenceID(self.PROBEMODEL_TO_PROBE, probeModelToProbe.GetID())
+      probeModelToProbe.SetSaveWithScene(False)
+    probeModelToProbe.SetAndObserveTransformNodeID(probeToPhantom.GetID())
+
+    imageToProbe = parameterNode.GetNodeReference(self.IMAGE_TO_PROBE)
+    if imageToProbe is None:
+      imageToProbePath = os.path.join(moduleDir, "Resources", "transforms", "ImageToProbe.h5")
+      imageToProbe = slicer.util.loadTransform(imageToProbePath)
+      parameterNode.SetNodeReferenceID(self.IMAGE_TO_PROBE, imageToProbe.GetID())
+      imageToProbe.SetSaveWithScene(False)
+    imageToProbe.SetAndObserveTransformNodeID(probeToPhantom.GetID())
 
     BiopsyTrajectoryToProbeModel = parameterNode.GetNodeReference(self.BIOPSYTRAJECTORY_TO_PROBEMODEL)
     if BiopsyTrajectoryToProbeModel is None:
@@ -1116,7 +1121,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       BiopsyTrajectoryToProbeModel = slicer.util.loadTransform(BiopsyTrajectoryToProbeModelPath)
       parameterNode.SetNodeReferenceID(self.BIOPSYTRAJECTORY_TO_PROBEMODEL, BiopsyTrajectoryToProbeModel.GetID())
       BiopsyTrajectoryToProbeModel.SetSaveWithScene(False)
-    BiopsyTrajectoryToProbeModel.SetAndObserveTransformNodeID(probeModelToProbeTip.GetID())
+    BiopsyTrajectoryToProbeModel.SetAndObserveTransformNodeID(probeModelToProbe.GetID())
 
     BiopsyModelToBiopsyTrajectory = parameterNode.GetNodeReference(self.BIOPSYMODEL_TO_BIOPSYTRAJECTORY)
     if BiopsyModelToBiopsyTrajectory is None:
@@ -1132,7 +1137,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       pointerToPhantom = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", self.POINTER_TO_PHANTOM)
       parameterNode.SetNodeReferenceID(self.POINTER_TO_PHANTOM, pointerToPhantom.GetID())
       pointerToPhantom.SetSaveWithScene(False)
-    pointerToPhantom.SetAndObserveTransformNodeID(phantomToReference.GetID())
+    pointerToPhantom.SetAndObserveTransformNodeID(phantomToRAS.GetID())
 
     pointerTipToPointer = parameterNode.GetNodeReference(self.POINTERTIP_TO_POINTER)
     if pointerTipToPointer is None:
@@ -1154,18 +1159,18 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
 
-    #Load TRUSToCylinder transform
-    trusToCylinder = caseNode.GetNodeReference(self.TRUS_TO_CYLINDER)
-    if trusToCylinder != None:
-      slicer.mrmlScene.RemoveNode(trusToCylinder)
-    trusToCylinderPath = os.path.join(moduleDir, "Resources", 'registered_zones', 'Patient_' + str(case), 'TRUSToCylinder.h5')
-    trusToCylinder = slicer.util.loadTransform(trusToCylinderPath)
-    trusToCylinder.SetName(self.TRUS_TO_CYLINDER)
-    caseNode.SetNodeReferenceID(self.TRUS_TO_CYLINDER, trusToCylinder.GetID())
-
-    #Add TRUSToCylinder into hierarchy
-    cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
-    trusToCylinder.SetAndObserveTransformNodeID(cylinderToBox.GetID())
+    # #Load TRUSToCylinder transform
+    # trusToCylinder = caseNode.GetNodeReference(self.TRUS_TO_CYLINDER)
+    # if trusToCylinder != None:
+    #   slicer.mrmlScene.RemoveNode(trusToCylinder)
+    # trusToCylinderPath = os.path.join(moduleDir, "Resources", 'registered_zones', 'Patient_' + str(case), 'TRUSToCylinder.h5')
+    # trusToCylinder = slicer.util.loadTransform(trusToCylinderPath)
+    # trusToCylinder.SetName(self.TRUS_TO_CYLINDER)
+    # caseNode.SetNodeReferenceID(self.TRUS_TO_CYLINDER, trusToCylinder.GetID())
+    #
+    # #Add TRUSToCylinder into hierarchy
+    # cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
+    # trusToCylinder.SetAndObserveTransformNodeID(cylinderToBox.GetID())
 
     #Load the TRUS volume
     trusVolume = caseNode.GetNodeReference(self.TRUS_VOLUME)
@@ -1175,8 +1180,6 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     trusVolume = slicer.util.loadVolume(trusPath)
     trusVolume.SetName(self.TRUS_VOLUME)
     caseNode.SetNodeReferenceID(self.TRUS_VOLUME, trusVolume.GetID())
-
-    trusVolume.SetAndObserveTransformNodeID(trusToCylinder.GetID())
 
     #load zone segmentation
     seg = caseNode.GetNodeReference(self.ZONE_SEGMENTATION)
@@ -1195,8 +1198,6 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     segDisplay.SetVisibility(False)
     segDisplay.SetOpacity(0.3)
     caseNode.SetNodeReferenceID(self.ZONE_SEGMENTATION, seg.GetID())
-
-    seg.SetAndObserveTransformNodeID(trusToCylinder.GetID())
 
     #Set the foreground and background of the red slice
     layoutManager = slicer.app.layoutManager()
