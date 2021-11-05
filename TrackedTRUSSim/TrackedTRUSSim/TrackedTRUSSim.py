@@ -54,6 +54,7 @@ and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR0132
 # TrackedTRUSSimWidget
 #
 
+
 class MainWidgetEventFilter(qt.QWidget):
 
   def __init__(self, moduleWidget):
@@ -432,6 +433,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   BIOPSYMODEL_TO_BIOPSYTRAJECTORY = "BiopsyModelToBiopsyTrajectory"
   IMAGE_TO_PROBE = "ImageToProbe"
   USSIMVOLUME_TO_USMASK = "USSimVolumeToUSMask"
+  RECONSTRUCTION_SLICE_VIEW = "ReconstructionSliceView"
 
   #PLUS related transforms
   POINTER_TO_PHANTOM = "PointerToPhantom"
@@ -459,6 +461,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   BIOPSY_TRANSFORM_ROLES = "BiopsyTransformRoles"
   ULTRASOUND_SIM_VOLUME = "UltrasoundSimVolume"
 
+  layoutManager = slicer.app.layoutManager().sliceWidget("Reconstruction")
+
 
   def __init__(self):
     """
@@ -468,6 +472,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     self.caseLoaded = False
     self.currCaseNumber = -1
+    slicer.mymod = self
 
 
   def saveScene(self, filename, currentUser):
@@ -521,6 +526,58 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     #Parameter node
     parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
 
+    #Determine whether the reconstruction slice has been made
+    reconstructionSliceView = parameterNode.GetNodeReference(self.RECONSTRUCTION_SLICE_VIEW)
+    if reconstructionSliceView is None:
+
+      #Create a new slice
+      layoutName = "Reconstruction"
+      layoutLabel = "R"
+      layoutColor = [1.0, 1.0, 0.0]
+      # ownerNode manages this view instead of the layout manager (it can be any node in the scene)
+      viewOwnerNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScriptedModuleNode")
+
+      # Create MRML nodes
+      viewLogic = slicer.vtkMRMLSliceLogic()
+      viewLogic.SetMRMLScene(slicer.mrmlScene)
+      viewNode = viewLogic.AddSliceNode(layoutName)
+      viewNode.SetLayoutLabel(layoutLabel)
+      viewNode.SetLayoutColor(layoutColor)
+      viewNode.SetAndObserveParentLayoutNodeID(viewOwnerNode.GetID())
+
+      #Add to parameter node
+      parameterNode.SetNodeReferenceID(self.RECONSTRUCTION_SLICE_VIEW, viewOwnerNode.GetID())
+
+      # For debugging: show the view
+      viewWidget = slicer.qMRMLSliceWidget()
+      viewWidget.setMRMLScene(slicer.mrmlScene)
+      viewWidget.setMRMLSliceNode(viewNode)
+      sliceLogics = slicer.app.applicationLogic().GetSliceLogics()
+      viewWidget.setSliceLogics(sliceLogics)
+      sliceLogics.AddItem(viewWidget.sliceLogic())
+      viewWidget.show()
+
+    #Get the trusVolume for use
+    caseNode = self.getCaseNode()
+
+    #Load the TRUS volume
+    trusVolume = caseNode.GetNodeReference(self.TRUS_VOLUME)
+
+    #Set the foreground and background of the reconstruction slice
+    layoutManager = slicer.app.layoutManager()
+    compositeRNode = layoutManager.sliceWidget("Reconstruction").sliceLogic().GetSliceCompositeNode()
+    usMaskVolume = parameterNode.GetNodeReference(self.MASK_VOLUME)
+    compositeRNode.SetBackgroundVolumeID(usMaskVolume.GetID())
+    compositeRNode.SetForegroundVolumeID(trusVolume.GetID())
+
+    #Set the opacity to strictly show the foreground
+    compositeRNode.SetForegroundOpacity(1)
+
+    self.setupResliceDriver("Reconstruction")
+
+    #Recenter the red slice on the new content
+    layoutManager.sliceWidget("Reconstruction").sliceLogic().FitSliceToAll()
+
     # Start by hiding intersecting volumes and slice view annotations
     # Disable slice annotations immediately
     sliceAnnotations = slicer.modules.DataProbeInstance.infoWidget.sliceAnnotations
@@ -543,10 +600,12 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     # Create a new blank volume if it doesn't already exist
     ultrasoundSimVolume = parameterNode.GetNodeReference(self.ULTRASOUND_SIM_VOLUME)
     if ultrasoundSimVolume is None:
-      imageSize = [601, 717, 1]
+      reconstructionSliceNode = slicer.app.layoutManager().sliceWidget("Reconstruction").mrmlSliceNode()
+      dims = reconstructionSliceNode.GetDimensions()
+      imageSize = [601, 717, 1] #*****
       voxelType = vtk.VTK_UNSIGNED_CHAR
       imageOrigin = [0, 0, 0]
-      imageSpacing = [0.55, 0.55, 0.55]
+      imageSpacing = [0.55, 0.55, 0.55] #****
       imageDirections = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
       fillVoxelValue = 0
 
@@ -588,71 +647,205 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     #Add the transform to the overall hierarchy
     USSimVolumeToUSMask.SetAndObserveTransformNodeID(ImageToProbe.GetID())
 
-    #Set the yellow slice to show the volume version of the slice
-    layoutManager = slicer.app.layoutManager()
-    compositeNode = layoutManager.sliceWidget("Yellow").sliceLogic().GetSliceCompositeNode()
-    compositeNode.SetBackgroundVolumeID(ultrasoundSimVolume.GetID())
-
-    #Get the reslice logic class and drive the yellow slice with the USSimVolume
-    resliceLogic = slicer.modules.volumereslicedriver.logic()
-    yellowSliceNode = slicer.app.layoutManager().sliceWidget("Yellow").mrmlSliceNode()
-
-    #Set the mask as the driver and set the mode to transverse
-    resliceLogic.SetDriverForSlice(ultrasoundSimVolume.GetID(), yellowSliceNode)
-    resliceLogic.SetModeForSlice(resliceLogic.MODE_TRANSVERSE, yellowSliceNode)
+    # #Set the yellow slice to show the volume version of the slice
+    # layoutManager = slicer.app.layoutManager()
+    # compositeNode = layoutManager.sliceWidget("Reconstruction").sliceLogic().GetSliceCompositeNode()
+    # compositeNode.SetBackgroundVolumeID(ultrasoundSimVolume.GetID())
+    #
+    # #Get the reslice logic class and drive the yellow slice with the USSimVolume
+    # resliceLogic = slicer.modules.volumereslicedriver.logic()
+    # yellowSliceNode = slicer.app.layoutManager().sliceWidget("Yellow").mrmlSliceNode()
+    #
+    # #Set the mask as the driver and set the mode to transverse
+    # resliceLogic.SetDriverForSlice(ultrasoundSimVolume.GetID(), yellowSliceNode)
+    # resliceLogic.SetModeForSlice(resliceLogic.MODE_TRANSVERSE, yellowSliceNode)
 
     #Hide the red slice in 3D and show the yellow slice
     redSliceNode = slicer.app.layoutManager().sliceWidget("Red").mrmlSliceNode()
-    yellowSliceNode.SetSliceVisible(True)
+    recontructionSliceNode = slicer.app.layoutManager().sliceWidget("Reconstruction").mrmlSliceNode()
     redSliceNode.SetSliceVisible(False)
+    recontructionSliceNode.SetSliceVisible(True)
 
-    # #Zoom in on the yellow slice to 50%
-    #
-    # newZoomPercent = 400
-    #
-    # # volumeNode = slicer.util.getNode('MRHead')
-    # volumeNode = slicer.util.getNode('MaskVolume')
-    # volumeSpacingMmPerPixel = volumeNode.GetSpacing()
-    # imageData = volumeNode.GetImageData()
-    # imageDimensionsPixel = imageData.GetDimensions()
-    #
-    # yellowSliceFovMm = yellowSliceNode.GetFieldOfView()  # Current FOV contains aspect ratio
-    # aspectRatioY = yellowSliceFovMm[1] / yellowSliceFovMm[0]
-    # imageWidthMm = imageDimensionsPixel[0] * volumeSpacingMmPerPixel[0]
-    #
-    # # Set new zoom
-    #
-    # newSliceWidthMm = 100 * imageWidthMm / newZoomPercent
-    # yellowSliceNode.SetFieldOfView(newSliceWidthMm, newSliceWidthMm * aspectRatioY, yellowSliceFovMm[2])
+  # def startReconstruction(self):
+  #
+  #   #Get the current directory
+  #   moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+  #
+  #   #Parameter node
+  #   parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
+  #
+  #   # Start by hiding intersecting volumes and slice view annotations
+  #   # Disable slice annotations immediately
+  #   sliceAnnotations = slicer.modules.DataProbeInstance.infoWidget.sliceAnnotations
+  #   sliceAnnotations.sliceViewAnnotationsEnabled = False
+  #   sliceAnnotations.updateSliceViewFromGUI()
+  #
+  #   # Hide the trajectory and biopsy location
+  #   biopsyModel = slicer.mrmlScene.GetFirstNodeByName(self.BIOPSY_MODEL)
+  #   biopsyDispNode = biopsyModel.GetDisplayNode()
+  #   biopsyDispNode.SliceIntersectionVisibilityOff()
+  #
+  #   # Hide the trajectory and biopsy location
+  #   biopsyTrajectoryModel = slicer.mrmlScene.GetFirstNodeByName(self.BIOPSY_TRAJECTORY_MODEL)
+  #   biopsyTrajectoryDispNode = biopsyTrajectoryModel.GetDisplayNode()
+  #   biopsyTrajectoryDispNode.SliceIntersectionVisibilityOff()
+  #
+  #   #Instantiate screencapture logic
+  #   self.screencapLogic = ScreenCapture.ScreenCaptureLogic()
+  #
+  #   # Create a new blank volume if it doesn't already exist
+  #   ultrasoundSimVolume = parameterNode.GetNodeReference(self.ULTRASOUND_SIM_VOLUME)
+  #   if ultrasoundSimVolume is None:
+  #     imageSize = [601, 717, 1]
+  #     voxelType = vtk.VTK_UNSIGNED_CHAR
+  #     imageOrigin = [0, 0, 0]
+  #     imageSpacing = [0.55, 0.55, 0.55]
+  #     imageDirections = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+  #     fillVoxelValue = 0
+  #
+  #     # Create an empty image volume, filled with fillVoxelValue
+  #     imageData = vtk.vtkImageData()
+  #     imageData.SetDimensions(imageSize)
+  #     imageData.AllocateScalars(voxelType, 1)
+  #     imageData.GetPointData().GetScalars().Fill(fillVoxelValue)
+  #
+  #     # Create volume node
+  #     ultrasoundSimVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", self.ULTRASOUND_SIM_VOLUME)
+  #     ultrasoundSimVolume.SetOrigin(imageOrigin)
+  #     ultrasoundSimVolume.SetSpacing(imageSpacing)
+  #     ultrasoundSimVolume.SetIJKToRASDirections(imageDirections)
+  #     ultrasoundSimVolume.SetAndObserveImageData(imageData)
+  #     ultrasoundSimVolume.CreateDefaultDisplayNodes()
+  #     ultrasoundSimVolume.CreateDefaultStorageNode()
+  #
+  #     #Add to parameter node
+  #     parameterNode.SetNodeReferenceID(self.ULTRASOUND_SIM_VOLUME, ultrasoundSimVolume.GetID())
+  #
+  #   #Add a listener to the tracking data
+  #   probeToPhantom = parameterNode.GetNodeReference(self.PROBE_TO_PHANTOM)
+  #   probeToPhantom.AddObserver(probeToPhantom.TransformModifiedEvent, self.reconstructionCallback)
+  #
+  #   #Confirm that USSimVolumeToUSMask is added to scene; if not, add it
+  #   ImageToProbe = parameterNode.GetNodeReference(self.IMAGE_TO_PROBE)
+  #   USSimVolumeToUSMask = parameterNode.GetNodeReference(self.USSIMVOLUME_TO_USMASK)
+  #
+  #   if USSimVolumeToUSMask is None:
+  #     USSimVolumeToUSMaskPath = os.path.join(moduleDir, "Resources", "transforms", "USSimVolumeToUSMask.h5")
+  #     USSimVolumeToUSMask = slicer.util.loadTransform(USSimVolumeToUSMaskPath)
+  #     parameterNode.SetNodeReferenceID(self.USSIMVOLUME_TO_USMASK, USSimVolumeToUSMask.GetID())
+  #     USSimVolumeToUSMask.SetSaveWithScene(False)
+  #
+  #     #Since it is new to the scene, add the SimVolume to this transform
+  #     ultrasoundSimVolume.SetAndObserveTransformNodeID(USSimVolumeToUSMask.GetID())
+  #
+  #   #Add the transform to the overall hierarchy
+  #   USSimVolumeToUSMask.SetAndObserveTransformNodeID(ImageToProbe.GetID())
+  #
+  #   #Set the yellow slice to show the volume version of the slice
+  #   layoutManager = slicer.app.layoutManager()
+  #   compositeNode = layoutManager.sliceWidget("Yellow").sliceLogic().GetSliceCompositeNode()
+  #   compositeNode.SetBackgroundVolumeID(ultrasoundSimVolume.GetID())
+  #
+  #   #Get the reslice logic class and drive the yellow slice with the USSimVolume
+  #   resliceLogic = slicer.modules.volumereslicedriver.logic()
+  #   yellowSliceNode = slicer.app.layoutManager().sliceWidget("Yellow").mrmlSliceNode()
+  #
+  #   #Set the mask as the driver and set the mode to transverse
+  #   resliceLogic.SetDriverForSlice(ultrasoundSimVolume.GetID(), yellowSliceNode)
+  #   resliceLogic.SetModeForSlice(resliceLogic.MODE_TRANSVERSE, yellowSliceNode)
+  #
+  #   #Hide the red slice in 3D and show the yellow slice
+  #   redSliceNode = slicer.app.layoutManager().sliceWidget("Red").mrmlSliceNode()
+  #   yellowSliceNode.SetSliceVisible(True)
+  #   redSliceNode.SetSliceVisible(False)
 
+  # def reconstructionCallback(self, caller, eventId):
+  #
+  #   # Parameter node
+  #   parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
+  #
+  #   # Get the current contents of the red slice view
+  #   redSliceView = self.screencapLogic.viewFromNode(slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeRed'))
+  #   im = qt.QPixmap.grabWidget(redSliceView).toImage()
+  #
+  #   width, height = im.width(), im.height()
+  #   img_np = np.array(im.constBits()).reshape(height, width, 4)
+  #   grayscale = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
+  #   # grayscale = cv2.resize(grayscale, (800, 800))
+  #   # cv2.imshow("TEST", grayscale)
+  #   vtkGrayscale = numpy_support.numpy_to_vtk(grayscale.ravel(), deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
+  #
+  #   # Convert the image to vtkImageData object
+  #   sliceImageData = vtk.vtkImageData()
+  #   # sliceImageData.SetScalarTypeToUnsignedChar()
+  #   sliceImageData.SetDimensions(width, height, 1)
+  #   sliceImageData.SetOrigin(0.0, 0.0, 0.0)
+  #   sliceImageData.SetSpacing(800 / width, 800 / height, 1.0)
+  #   sliceImageData.GetPointData().SetScalars(vtkGrayscale)
+  #
+  #   # Write this image data to the volume node
+  #   ultrasoundSimVolume = parameterNode.GetNodeReference(self.ULTRASOUND_SIM_VOLUME)
+  #   ultrasoundSimVolume.SetAndObserveImageData(sliceImageData)
+
+  # Redefine createParameterNode method.
+  # This method is used to create a parameter node that will not be saved with the scene, and will
+  # contain models / data that is shared across all cases within our module.
+  def createParameterNode(self):
+
+    node = ScriptedLoadableModuleLogic.createParameterNode(self)
+    node.SetSaveWithScene(False)  # Ensure that the parameter node is not saved with the scene
+    return node
 
   def reconstructionCallback(self,caller, eventId):
 
     #Parameter node
     parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
 
-    #Get the current contents of the red slice view
-    redSliceView = self.screencapLogic.viewFromNode(slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeRed'))
-    im = qt.QPixmap.grabWidget(redSliceView).toImage()
+    #Get reference to the TRUS volume
+    ptVolume = parameterNode.GetNodeReference(self.TRUS_VOLUME)
 
-    width, height = im.width(), im.height()
-    img_np = np.array(im.constBits()).reshape(height, width, 4)
-    grayscale = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
-    # grayscale = cv2.resize(grayscale, (800, 800))
-    # cv2.imshow("TEST", grayscale)
-    vtkGrayscale = numpy_support.numpy_to_vtk(grayscale.ravel(), deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
+    #Get the numpy resliced version of the volume based on the position of the red slice
+    imageData = self.resliceToNPImage(ptVolume)
 
+    vtkGrayscale = numpy_support.numpy_to_vtk(imageData.flatten(order='C'), deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
     #Convert the image to vtkImageData object
     sliceImageData = vtk.vtkImageData()
-    # sliceImageData.SetScalarTypeToUnsignedChar()
-    sliceImageData.SetDimensions(width, height, 1)
+    sliceImageData.SetDimensions(len(imageData[0]), len(imageData[1]), 1)
     sliceImageData.SetOrigin(0.0, 0.0, 0.0)
-    sliceImageData.SetSpacing(800/width, 800/height, 1.0)
     sliceImageData.GetPointData().SetScalars(vtkGrayscale)
 
     #Write this image data to the volume node
     ultrasoundSimVolume = parameterNode.GetNodeReference(self.ULTRASOUND_SIM_VOLUME)
     ultrasoundSimVolume.SetAndObserveImageData(sliceImageData)
+
+  def resliceToNPImage(self, volume, slice="Red"):
+    layoutManager = slicer.app.layoutManager()
+    sliceWidget = layoutManager.sliceWidget(slice)
+    sliceNode = sliceWidget.mrmlSliceNode()
+    imageReslice = sliceWidget.sliceLogic().GetBackgroundLayer().GetReslice()
+    imageData = imageReslice.GetOutputDataObject(0)
+    array = vtk.util.numpy_support.vtk_to_numpy(imageData.GetPointData().GetScalars())
+    sliceShape = sliceNode.GetDimensions()
+    npImage = array.reshape(sliceShape[1], sliceShape[0])
+    return npImage
+
+  def createVolumeSlice(imageData, nodeName="MyNewVolume"):
+    vtkGrayscale = numpy_support.numpy_to_vtk(imageData.flatten(order='C'), deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
+    # Convert the image to vtkImageData object
+    sliceImageData = vtk.vtkImageData()
+    sliceImageData.SetDimensions(len(imageData[0]), len(imageData), 1)
+    sliceImageData.SetOrigin(0.0, 0.0, 0.0)
+    sliceImageData.GetPointData().SetScalars(vtkGrayscale)
+    imageOrigin = [0, 0, 0]
+    imageDirections = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    # Create volume node
+    volumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", nodeName)
+    volumeNode.SetOrigin(imageOrigin)
+    volumeNode.SetSpacing(imageSpacing)
+    volumeNode.SetIJKToRASDirections(imageDirections)
+    volumeNode.SetAndObserveImageData(sliceImageData)
+    volumeNode.CreateDefaultDisplayNodes()
+    volumeNode.CreateDefaultStorageNode()
 
 
   #Redefine createParameterNode method.
@@ -1019,7 +1212,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     biopsyTrajectoryDispNode.SetSliceIntersectionOpacity(0.8)
     biopsyTrajectoryDispNode.SetColor(0,1,0)
 
-  def setupResliceDriver(self):
+  def setupResliceDriver(self, sliceName="Red"):
     """
     Drive yellow slice based on position of pointer tip
     """
@@ -1027,7 +1220,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     #Get the reslice logic class and yellow slice node
     resliceLogic = slicer.modules.volumereslicedriver.logic()
-    sliceNode = slicer.app.layoutManager().sliceWidget("Red").mrmlSliceNode()
+    sliceNode = slicer.app.layoutManager().sliceWidget(sliceName).mrmlSliceNode()
 
     #Set the mask as the driver and set the mode to transverse
     usMaskVolume = parameterNode.GetNodeReference(self.MASK_VOLUME)
@@ -1067,14 +1260,6 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       cylinderToBox.SetSaveWithScene(False)
     cylinderToBox.SetAndObserveTransformNodeID(boxModelToReference.GetID())
 
-    # phantomToReference = parameterNode.GetNodeReference(self.PHANTOM_TO_REFERENCE)
-    # if phantomToReference is None:
-    #   phantomToReferencePath = os.path.join(moduleDir, "Resources", "transforms", "PhantomToReference.h5")
-    #   phantomToReference = slicer.util.loadTransform(phantomToReferencePath)
-    #   parameterNode.SetNodeReferenceID(self.PHANTOM_TO_REFERENCE, phantomToReference.GetID())
-    #   phantomToReference.SetSaveWithScene(False)
-    # phantomToReference.SetAndObserveTransformNodeID(referenceToRas.GetID())
-
     probeToPhantom = parameterNode.GetNodeReference(self.PROBE_TO_PHANTOM)
     if probeToPhantom is None:
       probeToPhantomPath = os.path.join(moduleDir, "Resources", "transforms", "ProbeToPhantom.h5")
@@ -1082,22 +1267,6 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       parameterNode.SetNodeReferenceID(self.PROBE_TO_PHANTOM, probeToPhantom.GetID())
       probeToPhantom.SetSaveWithScene(False)
     probeToPhantom.SetAndObserveTransformNodeID(phantomToRAS.GetID())
-
-    # probeTipToProbe = parameterNode.GetNodeReference(self.PROBETIP_TO_PROBE)
-    # if probeTipToProbe is None:
-    #   probeTipToProbePath = os.path.join(moduleDir, "Resources", "transforms", "ProbeTipToProbe.h5")
-    #   probeTipToProbe = slicer.util.loadTransform(probeTipToProbePath)
-    #   parameterNode.SetNodeReferenceID(self.PROBETIP_TO_PROBE, probeTipToProbe.GetID())
-    #   probeTipToProbe.SetSaveWithScene(False)
-    # probeTipToProbe.SetAndObserveTransformNodeID(probeToPhantom.GetID())
-
-    # probeModelToProbeTip = parameterNode.GetNodeReference(self.PROBEMODEL_TO_PROBETIP)
-    # if probeModelToProbeTip is None:
-    #   probeModelToProbeTipPath = os.path.join(moduleDir, "Resources", "transforms", "ProbeModelToProbeTip.h5")
-    #   probeModelToProbeTip = slicer.util.loadTransform(probeModelToProbeTipPath)
-    #   parameterNode.SetNodeReferenceID(self.PROBEMODEL_TO_PROBETIP, probeModelToProbeTip.GetID())
-    #   probeModelToProbeTip.SetSaveWithScene(False)
-    # probeModelToProbeTip.SetAndObserveTransformNodeID(probeTipToProbe.GetID())
 
     probeModelToProbe = parameterNode.GetNodeReference(self.PROBEMODEL_TO_PROBE)
     if probeModelToProbe is None:
@@ -1158,19 +1327,6 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     print("casenode: ")
 
     moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
-
-    # #Load TRUSToCylinder transform
-    # trusToCylinder = caseNode.GetNodeReference(self.TRUS_TO_CYLINDER)
-    # if trusToCylinder != None:
-    #   slicer.mrmlScene.RemoveNode(trusToCylinder)
-    # trusToCylinderPath = os.path.join(moduleDir, "Resources", 'registered_zones', 'Patient_' + str(case), 'TRUSToCylinder.h5')
-    # trusToCylinder = slicer.util.loadTransform(trusToCylinderPath)
-    # trusToCylinder.SetName(self.TRUS_TO_CYLINDER)
-    # caseNode.SetNodeReferenceID(self.TRUS_TO_CYLINDER, trusToCylinder.GetID())
-    #
-    # #Add TRUSToCylinder into hierarchy
-    # cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
-    # trusToCylinder.SetAndObserveTransformNodeID(cylinderToBox.GetID())
 
     #Load the TRUS volume
     trusVolume = caseNode.GetNodeReference(self.TRUS_VOLUME)
