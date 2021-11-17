@@ -513,9 +513,13 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     #Remove the listener from the tracking data
     probeToPhantom = parameterNode.GetNodeReference(self.PROBE_TO_PHANTOM)
-    probeToPhantom.RemoveObserver(probeToPhantom.TransformModifiedEvent)
+    probeToPhantom.RemoveAllObservers()
 
   def startReconstruction(self):
+
+    #Change layouts to the debug layout
+    self.debuggingLayout()
+    print("Starting reconstruction")
 
     #Get the current directory
     moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
@@ -547,10 +551,10 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     if ultrasoundSimVolume is None:
       reconstructionSliceNode = slicer.app.layoutManager().sliceWidget("US_Sim").mrmlSliceNode()
       dims = reconstructionSliceNode.GetDimensions()
-      imageSize = [601, 717, 1] #*****
+      imageSize = [dims[0], dims[1], 1] #*****
       voxelType = vtk.VTK_UNSIGNED_CHAR
       imageOrigin = [0, 0, 0]
-      imageSpacing = [0.55, 0.55, 0.55] #****
+      imageSpacing = [1, 1, 1] #****
       imageDirections = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
       fillVoxelValue = 0
 
@@ -596,6 +600,13 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     recontructionSliceNode = slicer.app.layoutManager().sliceWidget("US_Sim").mrmlSliceNode()
     recontructionSliceNode.SetSliceVisible(True)
 
+    #save a copy of the foreground mask to subtract from the background TRUS image
+    layoutManager = slicer.app.layoutManager()
+    sliceWidget = layoutManager.sliceWidget("US_Sim")
+    imageResliceBackground = sliceWidget.sliceLogic().GetBackgroundLayer().GetReslice()
+    imageDataBackground = imageResliceBackground.GetOutputDataObject(0)
+    self.npImageBackground = vtk.util.numpy_support.vtk_to_numpy(imageDataBackground.GetPointData().GetScalars())
+
   # Redefine createParameterNode method.
   # This method is used to create a parameter node that will not be saved with the scene, and will
   # contain models / data that is shared across all cases within our module.
@@ -610,16 +621,20 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     #Parameter node
     parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
 
+    print("in callback")
+
     #Get reference to the TRUS volume
     ptVolume = parameterNode.GetNodeReference(self.TRUS_VOLUME)
 
     #Get the numpy resliced version of the volume based on the position of the red slice
     imageData = self.resliceToNPImage(ptVolume, "US_Sim")
+    imageData = np.flipud(imageData)
+    # cv2.imshow("TEST", imageData)
 
     vtkGrayscale = numpy_support.numpy_to_vtk(imageData.flatten(order='C'), deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
     #Convert the image to vtkImageData object
     sliceImageData = vtk.vtkImageData()
-    sliceImageData.SetDimensions(len(imageData[0]), len(imageData[1]), 1)
+    sliceImageData.SetDimensions(len(imageData[0]), len(imageData), 1)
     sliceImageData.SetOrigin(0.0, 0.0, 0.0)
     sliceImageData.GetPointData().SetScalars(vtkGrayscale)
 
@@ -631,11 +646,19 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     layoutManager = slicer.app.layoutManager()
     sliceWidget = layoutManager.sliceWidget(slice)
     sliceNode = sliceWidget.mrmlSliceNode()
-    imageReslice = sliceWidget.sliceLogic().GetBackgroundLayer().GetReslice()
-    imageData = imageReslice.GetOutputDataObject(0)
-    array = vtk.util.numpy_support.vtk_to_numpy(imageData.GetPointData().GetScalars())
+
+    imageResliceForeground = sliceWidget.sliceLogic().GetForegroundLayer().GetReslice()
+    imageDataForeground = imageResliceForeground.GetOutputDataObject(0)
+    npImageForeground = vtk.util.numpy_support.vtk_to_numpy(imageDataForeground.GetPointData().GetScalars())
+
+    #save a copy of the foreground mask to subtract from the background TRUS image
+    imageResliceBackground = sliceWidget.sliceLogic().GetBackgroundLayer().GetReslice()
+    imageDataBackground = imageResliceBackground.GetOutputDataObject(0)
+    npImageBackground = vtk.util.numpy_support.vtk_to_numpy(imageDataBackground.GetPointData().GetScalars())
+
+    combinedImage = npImageForeground * (npImageBackground/255)
     sliceShape = sliceNode.GetDimensions()
-    npImage = array.reshape(sliceShape[1], sliceShape[0])
+    npImage = combinedImage.reshape(sliceShape[1], sliceShape[0])
     return npImage
 
   def createVolumeSlice(imageData, nodeName="MyNewVolume"):
@@ -647,6 +670,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     sliceImageData.GetPointData().SetScalars(vtkGrayscale)
     imageOrigin = [0, 0, 0]
     imageDirections = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    imageSpacing = [1, 1, 1]
     # Create volume node
     volumeNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", nodeName)
     volumeNode.SetOrigin(imageOrigin)
@@ -732,6 +756,36 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     # Built-in layout IDs are all below 100, so you can choose any large random number
     # for your custom layout ID.
     customLayoutId = 501
+
+    layoutManager = slicer.app.layoutManager()
+    layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(customLayoutId, customLayout)
+
+    # Switch to the new custom layout
+    layoutManager.setLayout(customLayoutId)
+
+  #custom layout to show 3D view and yellow slice
+  def debuggingLayout(self):
+
+    customLayout = """
+    <layout type="horizontal" split="true">
+      <item>
+       <view class="vtkMRMLViewNode" singletontag="1">
+         <property name="viewlabel" action="default">1</property>
+       </view>
+      </item>
+      <item>
+       <view class="vtkMRMLSliceNode" singletontag="US_Sim">
+        <property name="orientation" action="default">Saggital</property>
+        <property name="viewlabel" action="default">S</property>
+        <property name="viewcolor" action="default">#EDD54C</property>
+       </view>
+      </item>
+    </layout>
+    """
+
+    # Built-in layout IDs are all below 100, so you can choose any large random number
+    # for your custom layout ID.
+    customLayoutId = 502
 
     layoutManager = slicer.app.layoutManager()
     layoutManager.layoutLogic().GetLayoutNode().AddLayoutDescription(customLayoutId, customLayout)
