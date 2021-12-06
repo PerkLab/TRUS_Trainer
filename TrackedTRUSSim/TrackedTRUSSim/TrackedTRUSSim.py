@@ -17,6 +17,14 @@ from pathlib import Path
 import ScreenCapture
 import cv2
 
+import tensorflow.keras.models as M
+import tensorflow.keras.backend as K
+from skimage.io import imsave, imread
+from skimage.transform import resize
+from skimage.util import img_as_float
+
+import time
+
 #
 # TrackedTRUSSim
 #
@@ -471,6 +479,50 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     self.currCaseNumber = -1
     slicer.mymod = self
 
+    self.smooth = 1
+    self.path = os.path.dirname(os.path.abspath(__file__))
+    self.UNetModel = M.load_model(self.path + './Resources/ML/'+'Prostate.h5', custom_objects={'dice_coef_loss': self.dice_coef_loss,'dice_coef':self.dice_coef})
+    self.UNetModel.load_weights(self.path + './Resources/ML/'+'Prostate.h5', by_name=True)
+    K.set_image_data_format('channels_last')  # TF dimension ordering in this code
+
+    self.img_rows = 256
+    self.img_cols = 256
+    self.radialTransform = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLinearTransformNode')
+    self.reslicedNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLinearTransformNode')
+    self.ijktoRasTransform = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLinearTransformNode')
+    self.shiftTransform = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLinearTransformNode')
+    self.radialTransform.SetName('Radial Transform')
+    self.reslicedNode.SetName('Reslice Transform')
+    self.ijktoRasTransform.SetName('IJKToRAS Transform')
+    self.radialMat = vtk.vtkMatrix4x4()
+    self.ijkToRasMat = vtk.vtkMatrix4x4()
+    self.resliceMat = vtk.vtkMatrix4x4()
+    self.shift = vtk.vtkMatrix4x4()
+    self.APD = vtk.vtkAppendPolyData()
+
+    self.edge = vtk.vtkFeatureEdges()
+    self.edge.BoundaryEdgesOn()
+    self.edge.FeatureEdgesOn()
+    self.edge.ManifoldEdgesOff()
+
+    self.prostateSeg = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSegmentationNode')
+    self.segLog = slicer.modules.segmentations.logic()
+
+
+  def dice_coef_loss(self, y_true, y_pred):
+    return -dice_coef(y_true, y_pred)
+
+  def dice_coef(self, y_true, y_pred):
+    y_true_f = K.flatten(y_true)
+    y_pred_f = K.flatten(y_pred)
+    intersection = K.sum(y_true_f * y_pred_f)
+    return (2. * intersection + self.smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + self.smooth)
+
+  def predict(self,im):
+    im = im/255.
+    self.x = np.expand_dims( cv2.resize(im,[256,256]), axis=2)
+    self.out = self.UNetModel.predict(np.expand_dims(self.x, axis=0))
+
 
   def saveScene(self, filename, currentUser):
 
@@ -518,7 +570,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   def startReconstruction(self):
 
     #Change layouts to the debug layout
-    self.debuggingLayout()
+    # self.debuggingLayout()
+    self.splitSliceViewer()
     print("Starting reconstruction")
 
     #Get the current directory
@@ -600,6 +653,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     recontructionSliceNode = slicer.app.layoutManager().sliceWidget("US_Sim").mrmlSliceNode()
     recontructionSliceNode.SetSliceVisible(True)
 
+    # slicer.app.layoutManager().sliceWidget("US_Sim").sliceLogic().GetBackgroundLayer().GetReslice().GetOutputDataObject(0).GetPointData().GetScalars()
+
     #save a copy of the foreground mask to subtract from the background TRUS image
     layoutManager = slicer.app.layoutManager()
     sliceWidget = layoutManager.sliceWidget("US_Sim")
@@ -627,9 +682,13 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     ptVolume = parameterNode.GetNodeReference(self.TRUS_VOLUME)
 
     #Get the numpy resliced version of the volume based on the position of the red slice
-    imageData = self.resliceToNPImage(ptVolume, "US_Sim")
+    imageData, reslicedNode = self.resliceToNPImage(ptVolume, "US_Sim")
     imageData = np.flipud(imageData)
     # cv2.imshow("TEST", imageData)
+
+    self.imageData = imageData
+
+    # getSeg(imageData)
 
     vtkGrayscale = numpy_support.numpy_to_vtk(imageData.flatten(order='C'), deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
     #Convert the image to vtkImageData object
@@ -641,6 +700,59 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     #Write this image data to the volume node
     ultrasoundSimVolume = parameterNode.GetNodeReference(self.ULTRASOUND_SIM_VOLUME)
     ultrasoundSimVolume.SetAndObserveImageData(sliceImageData)
+
+  def getSeg(self, imageData):
+    scan = slicer.util.getNode("TRUSVolume")
+    self.npImage = imageData
+    self.segmentation = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
+    self.segmentation.SetName('seg')
+    self.padL = int(np.ceil((510 - self.npImage.shape[0]) / 2)) - np.mod(self.npImage.shape[0], 2)
+    self.padR = int(np.ceil((510 - self.npImage.shape[0]) / 2))
+    self.padU = int(np.ceil((788 - self.npImage.shape[1]) / 2)) - np.mod(self.npImage.shape[1], 2)
+    self.padD = int(np.ceil((788 - self.npImage.shape[1]) / 2))
+    spacing = scan.GetSpacing()
+    self.shift.SetElement(1, 3, -0.2 * self.padL)
+    self.shift.SetElement(0, 3, -0.2* self.padU)
+    self.shiftTransform.SetMatrixTransformToParent(self.shift)
+    slicer.util.getNode('UltrasoundSimVolume').GetIJKToRASMatrix(self.ijkToRasMat)
+    self.ijktoRasTransform.SetMatrixTransformToParent(self.ijkToRasMat)
+    self.newIm = np.pad(self.npImage, ((self.padL, self.padR), (self.padU, self.padD)), mode='constant')
+    self.newIm = img_as_float(self.newIm)
+    self.Immean = np.mean(self.newIm)
+    self.Imstd = np.std(self.newIm)
+    self.newIm -= self.Immean
+    self.newIm /= self.Imstd
+    rows = cols = 256
+    rimg = resize(self.newIm, (rows, cols), preserve_range=True)
+    rimgs = np.expand_dims(rimg, axis=0)
+    rimgs = np.expand_dims(rimgs, axis=3)
+    out = self.UNetModel.predict(rimgs)
+    self.o = np.squeeze(out)
+    self.mskout = resize(self.o, (510, 788), preserve_range=True)
+    slicer.util.updateVolumeFromArray(self.segmentation, np.expand_dims(self.mskout, axis=0))
+    self.ijktoRasTransform.SetAndObserveTransformNodeID(self.shiftTransform.GetID())
+    self.reslicedNode.SetAndObserveTransformNodeID(self.ijktoRasTransform.GetID())
+    self.segmentation.SetAndObserveTransformNodeID(self.reslicedNode.GetID())
+    # self.segmentation.HardenTransform()
+    self.segLog.ImportLabelmapToSegmentationNode(self.segmentation, self.prostateSeg)
+    self.segLog.ExportAllSegmentsToModels(self.prostateSeg, 1)
+    Mods = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'seg')
+    self.segMod = Mods.GetItemAsObject(0)
+    polydata = self.segMod.GetPolyData()
+    self.APD.AddInputData(polydata)
+    self.APD.Update()
+    # self.prostateSeg.RemoveSegment('seg')
+    slicer.mrmlScene.RemoveNode(self.segMod)
+    # slicer.mrmlScene.RemoveNode(self.segmentation)
+
+  def polyDataToModel(self):
+    model = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
+    out = self.APD.GetOutput()
+    self.edge.SetInputData(out)
+    self.edge.Update()
+    bound = self.edge.GetOutput()
+    model.SetAndObservePolyData(bound)
+    model.SetName('Prostate')
 
   def resliceToNPImage(self, volume, slice):
     layoutManager = slicer.app.layoutManager()
@@ -659,7 +771,13 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     combinedImage = npImageForeground * (npImageBackground/255)
     sliceShape = sliceNode.GetDimensions()
     npImage = combinedImage.reshape(sliceShape[1], sliceShape[0])
-    return npImage
+
+    reslicedTransform =  sliceWidget.sliceLogic().GetBackgroundLayer().GetReslice().GetResliceTransform()
+    reslicedTransform.GetMatrix(self.resliceMat)
+    self.reslicedNode.SetMatrixTransformToParent(self.resliceMat)
+
+    return npImage, self.reslicedNode
+
 
   def createVolumeSlice(imageData, nodeName="MyNewVolume"):
     vtkGrayscale = numpy_support.numpy_to_vtk(imageData.flatten(order='C'), deep=True, array_type=vtk.VTK_UNSIGNED_CHAR)
