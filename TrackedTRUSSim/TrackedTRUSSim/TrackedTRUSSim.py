@@ -443,6 +443,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   USSIMVOLUME_TO_USMASK = "USSimVolumeToUSMask"
   SIM_SLICE_VIEW = "SimSliceView"
 
+  USSIMVOLUME_TO_SHIFT = "USSimVolumeToShift"
+
   #PLUS related transforms
   POINTER_TO_PHANTOM = "PointerToPhantom"
   POINTERTIP_TO_POINTER = "PointerTipToPointer"
@@ -701,7 +703,21 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     ultrasoundSimVolume = parameterNode.GetNodeReference(self.ULTRASOUND_SIM_VOLUME)
     ultrasoundSimVolume.SetAndObserveImageData(sliceImageData)
 
+
+  '''
+import numpy as np
+self = slicer.mymod
+ptVolume = getNode("TRUSVolume")
+imageData, reslicedNode = self.resliceToNPImage(ptVolume, "US_Sim")
+imageData = np.flipud(imageData)
+self.getSeg(imageData)
+   
+  '''
+
+
+
   def getSeg(self, imageData):
+    parameterNode = self.getParameterNode() #**
     scan = slicer.util.getNode("TRUSVolume")
     self.npImage = imageData
     self.segmentation = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
@@ -711,9 +727,10 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     self.padU = int(np.ceil((788 - self.npImage.shape[1]) / 2)) - np.mod(self.npImage.shape[1], 2)
     self.padD = int(np.ceil((788 - self.npImage.shape[1]) / 2))
     spacing = scan.GetSpacing()
-    self.shift.SetElement(1, 3, -0.2 * self.padL)
-    self.shift.SetElement(0, 3, -0.2* self.padU)
+    self.shift.SetElement(1, 3, -2*self.padL)
+    self.shift.SetElement(0, 3, -2*self.padU)
     self.shiftTransform.SetMatrixTransformToParent(self.shift)
+    self.shiftTransform.SetName('Shift')
     slicer.util.getNode('UltrasoundSimVolume').GetIJKToRASMatrix(self.ijkToRasMat)
     self.ijktoRasTransform.SetMatrixTransformToParent(self.ijkToRasMat)
     self.newIm = np.pad(self.npImage, ((self.padL, self.padR), (self.padU, self.padD)), mode='constant')
@@ -743,6 +760,8 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     self.APD.Update()
     # self.prostateSeg.RemoveSegment('seg')
     slicer.mrmlScene.RemoveNode(self.segMod)
+    USSimVolumeToShift = parameterNode.GetNodeReference(self.USSIMVOLUME_TO_SHIFT)  # **
+    self.shiftTransform.SetAndObserveTransformNodeID(USSimVolumeToShift.GetID())  # **
     # slicer.mrmlScene.RemoveNode(self.segmentation)
 
   def polyDataToModel(self):
@@ -1337,6 +1356,14 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       parameterNode.SetNodeReferenceID(self.POINTERTIP_TO_POINTER, pointerTipToPointer.GetID())
       pointerTipToPointer.SetSaveWithScene(False)
     pointerTipToPointer.SetAndObserveTransformNodeID(pointerToPhantom.GetID())
+
+    USSimVolumeToShift = parameterNode.GetNodeReference(self.USSIMVOLUME_TO_SHIFT)
+    if USSimVolumeToShift is None:
+      USSimVolumeToShiftPath = os.path.join(moduleDir, "Resources", "transforms", "USSimVolumeToShift.h5")
+      USSimVolumeToShift = slicer.util.loadTransform(USSimVolumeToShiftPath)
+      parameterNode.SetNodeReferenceID(self.USSIMVOLUME_TO_SHIFT, USSimVolumeToShift.GetID())
+      USSimVolumeToShift.SetSaveWithScene(False)
+    USSimVolumeToShift.SetAndObserveTransformNodeID(imageToProbe.GetID())
 
 
   def setupCase(self, case):
