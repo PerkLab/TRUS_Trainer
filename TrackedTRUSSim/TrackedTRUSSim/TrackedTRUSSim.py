@@ -510,6 +510,11 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     self.prostateSeg = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSegmentationNode')
     self.segLog = slicer.modules.segmentations.logic()
 
+    #Setup hierarchy
+    self.ijktoRasTransform.SetAndObserveTransformNodeID(self.shiftTransform.GetID())
+    self.reslicedNode.SetAndObserveTransformNodeID(self.ijktoRasTransform.GetID())
+    self.prostateSeg.SetAndObserveTransformNodeID(self.shiftTransform.GetID())
+
 
   def dice_coef_loss(self, y_true, y_pred):
     return -dice_coef(y_true, y_pred)
@@ -678,7 +683,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     #Parameter node
     parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
 
-    print("in callback")
+    # print("in callback")
 
     #Get reference to the TRUS volume
     ptVolume = parameterNode.GetNodeReference(self.TRUS_VOLUME)
@@ -704,19 +709,65 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     ultrasoundSimVolume.SetAndObserveImageData(sliceImageData)
 
 
-  '''
+  # def getSeg(self, imageData):
+  #   parameterNode = self.getParameterNode() #**
+  #   scan = slicer.util.getNode("TRUSVolume")
+  #   self.npImage = imageData
+  #   self.segmentation = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
+  #   self.segmentation.SetName('seg')
+  #   self.padL = int(np.ceil((510 - self.npImage.shape[0]) / 2)) - np.mod(self.npImage.shape[0], 2)
+  #   self.padR = int(np.ceil((510 - self.npImage.shape[0]) / 2))
+  #   self.padU = int(np.ceil((788 - self.npImage.shape[1]) / 2)) - np.mod(self.npImage.shape[1], 2)
+  #   self.padD = int(np.ceil((788 - self.npImage.shape[1]) / 2))
+  #   spacing = scan.GetSpacing()
+  #   self.shift.SetElement(1, 3, -2*self.padL)
+  #   self.shift.SetElement(0, 3, -2*self.padU)
+  #   self.shiftTransform.SetMatrixTransformToParent(self.shift)
+  #   self.shiftTransform.SetName('Shift')
+  #   slicer.util.getNode('UltrasoundSimVolume').GetIJKToRASMatrix(self.ijkToRasMat)
+  #   self.ijktoRasTransform.SetMatrixTransformToParent(self.ijkToRasMat)
+  #   self.newIm = np.pad(self.npImage, ((self.padL, self.padR), (self.padU, self.padD)), mode='constant')
+  #   self.newIm = img_as_float(self.newIm)
+  #   self.Immean = np.mean(self.newIm)
+  #   self.Imstd = np.std(self.newIm)
+  #   self.newIm -= self.Immean
+  #   self.newIm /= self.Imstd
+  #   rows = cols = 256
+  #   rimg = resize(self.newIm, (rows, cols), preserve_range=True)
+  #   rimgs = np.expand_dims(rimg, axis=0)
+  #   rimgs = np.expand_dims(rimgs, axis=3)
+  #   out = self.UNetModel.predict(rimgs)
+  #   self.o = np.squeeze(out)
+  #   self.mskout = resize(self.o, (510, 788), preserve_range=True)
+  #   slicer.util.updateVolumeFromArray(self.segmentation, np.expand_dims(self.mskout, axis=0))
+  #   self.ijktoRasTransform.SetAndObserveTransformNodeID(self.shiftTransform.GetID())
+  #   self.reslicedNode.SetAndObserveTransformNodeID(self.ijktoRasTransform.GetID())
+  #   self.segmentation.SetAndObserveTransformNodeID(self.reslicedNode.GetID())
+  #   # self.segmentation.HardenTransform()
+  #   self.segLog.ImportLabelmapToSegmentationNode(self.segmentation, self.prostateSeg)
+  #   self.segLog.ExportAllSegmentsToModels(self.prostateSeg, 1)
+  #   Mods = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'seg')
+  #   self.segMod = Mods.GetItemAsObject(0)
+  #   polydata = self.segMod.GetPolyData()
+  #   self.APD.AddInputData(polydata)
+  #   self.APD.Update()
+  #   # self.prostateSeg.RemoveSegment('seg')
+  #   slicer.mrmlScene.RemoveNode(self.segMod)
+  #   USSimVolumeToShift = parameterNode.GetNodeReference(self.USSIMVOLUME_TO_SHIFT)  # **
+  #   self.shiftTransform.SetAndObserveTransformNodeID(USSimVolumeToShift.GetID())  # **
+  #   # slicer.mrmlScene.RemoveNode(self.segmentation)
+
+    '''
 import numpy as np
 self = slicer.mymod
 ptVolume = getNode("TRUSVolume")
 imageData, reslicedNode = self.resliceToNPImage(ptVolume, "US_Sim")
 imageData = np.flipud(imageData)
 self.getSeg(imageData)
-   
-  '''
+    '''
 
 
-
-  def getSeg(self, imageData):
+  def getSeg(self, imageData, prepSeg=False):
     parameterNode = self.getParameterNode() #**
     scan = slicer.util.getNode("TRUSVolume")
     self.npImage = imageData
@@ -746,23 +797,28 @@ self.getSeg(imageData)
     out = self.UNetModel.predict(rimgs)
     self.o = np.squeeze(out)
     self.mskout = resize(self.o, (510, 788), preserve_range=True)
-    slicer.util.updateVolumeFromArray(self.segmentation, np.expand_dims(self.mskout, axis=0))
-    self.ijktoRasTransform.SetAndObserveTransformNodeID(self.shiftTransform.GetID())
-    self.reslicedNode.SetAndObserveTransformNodeID(self.ijktoRasTransform.GetID())
+    slicer.util.updateVolumeFromArray(self.segmentation, np.expand_dims(self.mskout, axis=0)) #Generating the label map
     self.segmentation.SetAndObserveTransformNodeID(self.reslicedNode.GetID())
-    # self.segmentation.HardenTransform()
     self.segLog.ImportLabelmapToSegmentationNode(self.segmentation, self.prostateSeg)
-    self.segLog.ExportAllSegmentsToModels(self.prostateSeg, 1)
+    self.segLog.ExportAllSegmentsToModels(self.prostateSeg, 0)
+    # Mods = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'seg')
+    # self.segMod = Mods.GetItemAsObject(0)
+    # polydata = self.segMod.GetPolyData()
+    # self.APD.AddInputData(polydata)
+    # self.APD.Update()
+    USSimVolumeToShift = parameterNode.GetNodeReference(self.USSIMVOLUME_TO_SHIFT)  # **
+    self.shiftTransform.SetAndObserveTransformNodeID(USSimVolumeToShift.GetID())  # **
+    slicer.mrmlScene.RemoveNode(self.segmentation)
+    self.prostateSeg.RemoveSegment('seg')
     Mods = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'seg')
     self.segMod = Mods.GetItemAsObject(0)
+    self.segMod.HardenTransform()
     polydata = self.segMod.GetPolyData()
     self.APD.AddInputData(polydata)
     self.APD.Update()
-    # self.prostateSeg.RemoveSegment('seg')
     slicer.mrmlScene.RemoveNode(self.segMod)
-    USSimVolumeToShift = parameterNode.GetNodeReference(self.USSIMVOLUME_TO_SHIFT)  # **
-    self.shiftTransform.SetAndObserveTransformNodeID(USSimVolumeToShift.GetID())  # **
-    # slicer.mrmlScene.RemoveNode(self.segmentation)
+
+
 
   def polyDataToModel(self):
     model = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
