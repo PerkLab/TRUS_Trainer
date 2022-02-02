@@ -23,7 +23,7 @@ from skimage.io import imsave, imread
 from skimage.transform import resize
 from skimage.util import img_as_float
 
-import time
+import open3d as o3d
 
 #
 # TrackedTRUSSim
@@ -797,15 +797,12 @@ self.getSeg(imageData)
     out = self.UNetModel.predict(rimgs)
     self.o = np.squeeze(out)
     self.mskout = resize(self.o, (510, 788), preserve_range=True)
+    self.mskout = self.mskout.astype(np.uint8)
+
     slicer.util.updateVolumeFromArray(self.segmentation, np.expand_dims(self.mskout, axis=0)) #Generating the label map
     self.segmentation.SetAndObserveTransformNodeID(self.reslicedNode.GetID())
     self.segLog.ImportLabelmapToSegmentationNode(self.segmentation, self.prostateSeg)
     self.segLog.ExportAllSegmentsToModels(self.prostateSeg, 0)
-    # Mods = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'seg')
-    # self.segMod = Mods.GetItemAsObject(0)
-    # polydata = self.segMod.GetPolyData()
-    # self.APD.AddInputData(polydata)
-    # self.APD.Update()
     USSimVolumeToShift = parameterNode.GetNodeReference(self.USSIMVOLUME_TO_SHIFT)  # **
     self.shiftTransform.SetAndObserveTransformNodeID(USSimVolumeToShift.GetID())  # **
     slicer.mrmlScene.RemoveNode(self.segmentation)
@@ -818,7 +815,16 @@ self.getSeg(imageData)
     self.APD.Update()
     slicer.mrmlScene.RemoveNode(self.segMod)
 
-
+    n = slicer.mrmlScene.GetNodesByName('Reslice Transform').GetItemAsObject(0)
+    idx = cv2.findContours(self.mskout, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)[0][0]  # Get the contour points of the segmentation
+    resliced4x4 = vtk.vtkMatrix4x4()
+    n.GetMatrixTransformToWorld(resliced4x4)
+    for i in range(0, len(idx), 15):
+      pt = [idx[i][0][0], idx[i][0][1], 0, 1]
+      print("before transform: " + str(pt))
+      transformedPt = resliced4x4.MultiplyPoint(pt)
+      print("after transform: " + str(transformedPt))
+      slicer.modules.markups.logic().AddFiducial(transformedPt[0], transformedPt[1], transformedPt[2])
 
   def polyDataToModel(self):
     model = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
@@ -828,6 +834,24 @@ self.getSeg(imageData)
     bound = self.edge.GetOutput()
     model.SetAndObservePolyData(bound)
     model.SetName('Prostate')
+
+  def modelToSTL(self, depth):
+    n = slicer.util.getNode("Prostate")
+    normals = n.GetPolyData().GetPointData().GetNormals()
+    pts = n.GetPolyData().GetPoints().GetData()
+    pts_np = vtk.util.numpy_support.vtk_to_numpy(pts)
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pts_np)
+    pcd.normals = o3d.utility.Vector3dVector(normals)
+
+    poisson_mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=depth, width=0, scale=1.1, linear_fit=False)[0]
+    # o3d.visualization.draw_geometries([poisson_mesh])
+
+    outputPath = "C:\\repos\\TRUS_Trainer\\TrackedTRUSSim\\TrackedTRUSSim\\Resources\\models\\"
+    poisson_mesh = o3d.geometry.TriangleMesh.compute_triangle_normals(poisson_mesh)
+    o3d.io.write_triangle_mesh(outputPath + "mesh.stl", poisson_mesh)
+
 
   def resliceToNPImage(self, volume, slice):
     layoutManager = slicer.app.layoutManager()
