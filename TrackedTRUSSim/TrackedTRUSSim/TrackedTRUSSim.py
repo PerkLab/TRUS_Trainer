@@ -432,8 +432,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   """
 
   # Transform names
-  BOXMODEL_TO_REFERENCE = "BoxModelToReference"
-  CYLINDER_TO_BOX = "CylinderToBox"
+  PHANTOMMODEL_TO_REFERENCE = "PhantomModelToReference"
   PROBE_TO_PHANTOM = "ProbeToPhantom"
   PHANTOM_TO_RAS = "PhantomToRAS"
   PROBEMODEL_TO_PROBE = "ProbeModelToProbe"
@@ -451,7 +450,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
   #Model names
   PROBE_MODEL = "ProbeModel"
-  BOX_MODEL = "BoxModel"
+  PHANTOM_MODEL = "PhantomModel"
   CYLINDER_MODEL = "CylinderModel"
   TRUS_VOLUME = "TRUSVolume"
   ZONE_SEGMENTATION = "ZoneSegmentation"
@@ -763,6 +762,7 @@ self = slicer.mymod
 ptVolume = getNode("TRUSVolume")
 imageData, reslicedNode = self.resliceToNPImage(ptVolume, "US_Sim")
 imageData = np.flipud(imageData)
+imageData = np.fliplr(imageData)
 self.getSeg(imageData)
     '''
 
@@ -815,6 +815,7 @@ self.getSeg(imageData)
     self.APD.Update()
     slicer.mrmlScene.RemoveNode(self.segMod)
 
+    # ** This is the new section that converts a contour to fiducials **
     n = slicer.mrmlScene.GetNodesByName('Reslice Transform').GetItemAsObject(0)
     idx = cv2.findContours(self.mskout, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)[0][0]  # Get the contour points of the segmentation
     resliced4x4 = vtk.vtkMatrix4x4()
@@ -1206,30 +1207,18 @@ self.getSeg(imageData)
 
     #Create models
 
-    boxModel = parameterNode.GetNodeReference(self.BOX_MODEL)
-    boxModelPath = os.path.join(moduleDir, "Resources", "models", "BoxModel.vtk")
-    if boxModel is None:
-      boxModel =  slicer.util.loadModel(boxModelPath)
-      boxModel.SetName(self.BOX_MODEL)
-      parameterNode.SetNodeReferenceID(self.BOX_MODEL, boxModel.GetID())
+    phantomModel = parameterNode.GetNodeReference(self.PHANTOM_MODEL)
+    phantomModelPath = os.path.join(moduleDir, "Resources", "models", "PhantomModel.stl")
+    if phantomModel is None:
+      phantomModel =  slicer.util.loadModel(phantomModelPath)
+      phantomModel.SetName(self.PHANTOM_MODEL)
+      parameterNode.SetNodeReferenceID(self.PHANTOM_MODEL, phantomModel.GetID())
 
-    boxModelToReference = parameterNode.GetNodeReference(self.BOXMODEL_TO_REFERENCE)
-    boxModel.SetAndObserveTransformNodeID(boxModelToReference.GetID())
-    boxModel.GetDisplayNode().SetOpacity(0.1)
-    boxModel.GetDisplayNode().SetColor(0,0,1)
-    boxModel.SetSaveWithScene(False)
-
-    cylinderModel = parameterNode.GetNodeReference(self.CYLINDER_MODEL)
-    cylinderModelPath = os.path.join(moduleDir, "Resources", "models", "CylinderModel.vtk")
-    if cylinderModel is None:
-      cylinderModel =  slicer.util.loadModel(cylinderModelPath)
-      cylinderModel.SetName(self.CYLINDER_MODEL)
-      parameterNode.SetNodeReferenceID(self.CYLINDER_MODEL, cylinderModel.GetID())
-
-    cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
-    cylinderModel.SetAndObserveTransformNodeID(cylinderToBox.GetID())
-    cylinderModel.GetDisplayNode().SetOpacity(0.1)
-    cylinderModel.SetSaveWithScene(False)
+    phantomModelToReference = parameterNode.GetNodeReference(self.PHANTOMMODEL_TO_REFERENCE)
+    phantomModel.SetAndObserveTransformNodeID(phantomModelToReference.GetID())
+    phantomModel.GetDisplayNode().SetOpacity(0.1)
+    phantomModel.GetDisplayNode().SetColor(0,0,1)
+    phantomModel.SetSaveWithScene(False)
 
     probeModel = parameterNode.GetNodeReference(self.PROBE_MODEL)
     probeModelPath = os.path.join(moduleDir, "Resources", "models", "ProbeModel.stl")
@@ -1359,13 +1348,6 @@ self.getSeg(imageData)
 
     moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
 
-    boxModelToReference = parameterNode.GetNodeReference(self.BOXMODEL_TO_REFERENCE)
-    if boxModelToReference is None:
-      boxModelToReferencePath = os.path.join(moduleDir, "Resources", "transforms", "BoxModelToReference.h5")
-      boxModelToReference = slicer.util.loadTransform(boxModelToReferencePath)
-      parameterNode.SetNodeReferenceID(self.BOXMODEL_TO_REFERENCE, boxModelToReference.GetID())
-      boxModelToReference.SetSaveWithScene(False)
-
     phantomToRAS = parameterNode.GetNodeReference(self.PHANTOM_TO_RAS)
     if phantomToRAS is None:
       phantomToRASPath = os.path.join(moduleDir, "Resources", "transforms", "PhantomToRAS.h5")
@@ -1373,13 +1355,13 @@ self.getSeg(imageData)
       parameterNode.SetNodeReferenceID(self.PHANTOM_TO_RAS, phantomToRAS.GetID())
       phantomToRAS.SetSaveWithScene(False)
 
-    cylinderToBox = parameterNode.GetNodeReference(self.CYLINDER_TO_BOX)
-    if cylinderToBox is None:
-      cylinderToBoxPath = os.path.join(moduleDir, "Resources", "transforms", "CylinderToBox.h5")
-      cylinderToBox = slicer.util.loadTransform(cylinderToBoxPath)
-      parameterNode.SetNodeReferenceID(self.CYLINDER_TO_BOX, cylinderToBox.GetID())
-      cylinderToBox.SetSaveWithScene(False)
-    cylinderToBox.SetAndObserveTransformNodeID(boxModelToReference.GetID())
+    phantomModelToReference = parameterNode.GetNodeReference(self.PHANTOMMODEL_TO_REFERENCE)
+    if phantomModelToReference is None:
+      phantomModelToReferencePath = os.path.join(moduleDir, "Resources", "transforms", "PhantomModelToReference.h5")
+      phantomModelToReference = slicer.util.loadTransform(phantomModelToReferencePath)
+      parameterNode.SetNodeReferenceID(self.PHANTOMMODEL_TO_REFERENCE, phantomModelToReference.GetID())
+      phantomModelToReference.SetSaveWithScene(False)
+    phantomModelToReference.SetAndObserveTransformNodeID(phantomToRAS.GetID())
 
     probeToPhantom = parameterNode.GetNodeReference(self.PROBE_TO_PHANTOM)
     if probeToPhantom is None:
