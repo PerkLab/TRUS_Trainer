@@ -1,29 +1,20 @@
 import json
 import os
-import unittest
-import logging
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
-
-import ScreenCapture
 import numpy as np
 from vtk.util.numpy_support import vtk_to_numpy
 from vtk.util import numpy_support
-from datetime import datetime
-from glob import glob
 from pathlib import Path
-
 import ScreenCapture
 import cv2
-
 import tensorflow.keras.models as M
 import tensorflow.keras.backend as K
-from skimage.io import imsave, imread
 from skimage.transform import resize
 from skimage.util import img_as_float
-
 import open3d as o3d
+import time
 
 #
 # TrackedTRUSSim
@@ -140,6 +131,11 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.startReconstructionButton.connect('clicked(bool)', self.onStartReconstruction)
     self.ui.stopReconstructionButton.connect('clicked(bool)', self.onStopReconstruction)
 
+    self.ui.patientComboBox.currentIndexChanged.connect(self.onPatientComboBoxChanged)
+    self.ui.startTrialButton.connect('clicked(bool)', self.onStartTrial)
+    self.ui.endTrialButton.connect('clicked(bool)', self.onEndTrial)
+    self.ui.captureContourButton.connect('clicked(bool)', self.onCaptureContour)
+
     self.eventFilter = MainWidgetEventFilter(self)
     slicer.util.mainWindow().installEventFilter(self.eventFilter)
 
@@ -152,7 +148,93 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #Setup icons
     self.placeIcons()
 
-    #Ensure that all checkbox states
+    #Create a flag to indicate whether reconstruction is ongoing
+    self.reconstructionFlag = False
+
+
+  def onPatientComboBoxChanged(self):
+
+      #If reconstruction is already ongoing, pause while we change volumes
+      if self.reconstructionFlag:
+        self.logic.stopReconstruction()
+
+      # get current case, recognizing that the cases that we use start from 8 onward
+      case = self.ui.patientComboBox.currentIndex + 7
+
+      print("case being loaded: " + str(case))
+
+      # load the appropriate transforms
+      self.logic.setupCase(case)
+
+      self.logic.startReconstruction()
+      self.reconstructionFlag = True
+
+      self.shortcutContour = qt.QShortcut(slicer.util.mainWindow())
+      self.shortcutContour.setKey(qt.QKeySequence("Space"))
+      self.shortcutContour.connect('activated()', self.onCaptureContour)
+
+
+  def onStartTrial(self):
+
+    #Initialize vars to record trial properties
+    self.trialStartTime = time.time()
+    self.trialLength = 0
+    self.numContours = 0
+    self.currentTrialName = self.ui.participantComboBox.currentText + "_" + self.ui.patientComboBox.currentText + "_Trial_" + self.ui.trialComboBox.currentText
+
+    fid_name = self.currentTrialName
+    print("Name: " + fid_name)
+    f = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", fid_name)
+    f.GetDisplayNode().PointLabelsVisibilityOff()
+
+
+  def onEndTrial(self):
+
+    self.trialLength = time.time() - self.trialStartTime
+
+    self.saveTrialDetails()
+
+
+  def saveTrialDetails(self):
+
+    outputPath = os.path.join(self.moduleDirPath, "TrialResults", self.currentTrialName)
+
+    if not os.path.exists(outputPath):
+      os.makedirs(outputPath)
+
+    #Save the fiducial positions as an .npy file
+    f = slicer.mrmlScene.GetNodesByClassByName("vtkMRMLMarkupsFiducialNode", self.currentTrialName).GetItemAsObject(0)
+    n = f.GetNumberOfControlPoints()
+    pts = []
+    for i in range(n):
+      pts.append(tuple(f.GetNthControlPointPositionVector(i)))
+    fids_path = os.path.join(outputPath, "fiducials.npy")
+    np.save(fids_path, pts)
+
+    #Generate and save the raw contours
+    self.logic.polyDataToModel(self.currentTrialName)
+    prostateModelNode = slicer.mrmlScene.GetNodesByClassByName("vtkMRMLModelNode", "Prostate").GetItemAsObject(0)
+    prostateModelPath = os.path.join(outputPath, "prostateContours.vtk")
+    slicer.util.saveNode(prostateModelNode, prostateModelPath)
+
+    #Create a txt file to store some properties of the test
+    logPath = os.path.join(outputPath, "log.txt")
+    logFile = open(logPath,"w+")
+    logFile.write("--- Prostate Reconstruction Log File ---\r\n")
+    logFile.write("Participant:        " + self.ui.participantComboBox.currentText + "\n")
+    logFile.write("Patient Volume:     " + self.ui.patientComboBox.currentText + "\n")
+    logFile.write("Trial Number:       " + self.ui.trialComboBox.currentText + "\n\n")
+    logFile.write("Time of Completion: " + str(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())) + "\n")
+    logFile.write("Duration of Trial:  " + str(round(self.trialLength,1)) + "seconds \n")
+    logFile.write("Number of Contours: " + str(self.numContours) + "\n")
+    logFile.close()
+
+
+  def onCaptureContour(self):
+
+    self.logic.captureContour()
+    self.numContours = self.numContours + 1
+
 
   def placeIcons(self):
 
@@ -400,6 +482,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def onStopReconstruction(self):
 
     self.logic.stopReconstruction()
+    self.reconstructionFlag = False
 
 
   def confirmExit(self):
@@ -469,6 +552,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   #Various other node names
   BIOPSY_TRANSFORM_ROLES = "BiopsyTransformRoles"
   ULTRASOUND_SIM_VOLUME = "UltrasoundSimVolume"
+  PROSTATE_CAPSULE_MODEL = "ProstateCapsuleModel"
 
   def __init__(self):
     """
@@ -766,6 +850,13 @@ imageData = np.fliplr(imageData)
 self.getSeg(imageData)
     '''
 
+  def captureContour(self):
+    scan = slicer.util.getNode("TRUSVolume")
+    imageData, reslicedNode = self.resliceToNPImage(scan, "US_Sim")
+    imageData = np.flipud(imageData)
+    imageData = np.fliplr(imageData)
+    self.getSeg(imageData)
+
 
   def getSeg(self, imageData, prepSeg=False):
     parameterNode = self.getParameterNode() #**
@@ -827,7 +918,7 @@ self.getSeg(imageData)
       print("after transform: " + str(transformedPt))
       slicer.modules.markups.logic().AddFiducial(transformedPt[0], transformedPt[1], transformedPt[2])
 
-  def polyDataToModel(self):
+  def polyDataToModel(self, modelName = "Prostate"):
     model = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLModelNode')
     out = self.APD.GetOutput()
     self.edge.SetInputData(out)
@@ -835,6 +926,17 @@ self.getSeg(imageData)
     bound = self.edge.GetOutput()
     model.SetAndObservePolyData(bound)
     model.SetName('Prostate')
+
+  def fidsToModel(self, fiducialNodeName):
+    parameterNode = self.getParameterNode()
+    prostateModel = parameterNode.GetNodeReference(self.PROSTATE_CAPSULE_MODEL)
+    if prostateModel is None:
+      prostateModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", self.PROSTATE_CAPSULE_MODEL)
+      parameterNode.SetNodeReferenceID(self.PROBE_MODEL, prostateModel.GetID())
+    fiducialNode = slicer.mrmlScene.GetNodesByClass("vtkMRMLMarkupsFiducialNode").GetItemAsObject(0)
+    mtmlogic = slicer.modules.markupstomodel.logic()
+    if (fiducialNode != None) and (prostateModel != None) and (mtmlogic != None):
+      mtmlogic.UpdateClosedSurfaceModel(fiducialNode, prostateModel)
 
   def modelToSTL(self, depth):
     n = slicer.util.getNode("Prostate")
