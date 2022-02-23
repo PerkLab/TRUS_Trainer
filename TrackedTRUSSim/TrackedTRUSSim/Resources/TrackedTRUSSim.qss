@@ -34,6 +34,11 @@ QPushButton:hover
   border: 2px solid #DDDEDA;
 }
 
+QPushButton:disabled
+{
+  background-color: #737373
+}
+
 ctkComboBox
 {
   color: #DDDEDA;

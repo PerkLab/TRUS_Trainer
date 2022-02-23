@@ -131,7 +131,9 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.startReconstructionButton.connect('clicked(bool)', self.onStartReconstruction)
     self.ui.stopReconstructionButton.connect('clicked(bool)', self.onStopReconstruction)
 
+    self.ui.participantComboBox.currentIndexChanged.connect(self.onParticipantComboBoxChanged)
     self.ui.patientComboBox.currentIndexChanged.connect(self.onPatientComboBoxChanged)
+    self.ui.trialComboBox.currentIndexChanged.connect(self.onTrialComboBoxChanged)
     self.ui.startTrialButton.connect('clicked(bool)', self.onStartTrial)
     self.ui.endTrialButton.connect('clicked(bool)', self.onEndTrial)
     self.ui.captureContourButton.connect('clicked(bool)', self.onCaptureContour)
@@ -150,29 +152,37 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     #Create a flag to indicate whether reconstruction is ongoing
     self.reconstructionFlag = False
+    self.confirmComboSelections()
 
 
   def onPatientComboBoxChanged(self):
 
-      #If reconstruction is already ongoing, pause while we change volumes
-      if self.reconstructionFlag:
-        self.logic.stopReconstruction()
+    #If reconstruction is already ongoing, pause while we change volumes
+    if self.reconstructionFlag:
+      self.logic.stopReconstruction()
 
-      # get current case, recognizing that the cases that we use start from 8 onward
-      case = self.ui.patientComboBox.currentIndex + 7
+    # get current case, recognizing that the cases that we use start from 8 onward
+    case = self.ui.patientComboBox.currentIndex + 7
 
-      print("case being loaded: " + str(case))
+    # print("case being loaded: " + str(case))
 
-      # load the appropriate transforms
-      self.logic.setupCase(case)
+    # load the appropriate transforms
+    self.logic.setupCase(case)
 
-      self.logic.startReconstruction()
-      self.reconstructionFlag = True
+    self.logic.startReconstruction()
+    self.reconstructionFlag = True
 
-      self.shortcutContour = qt.QShortcut(slicer.util.mainWindow())
-      self.shortcutContour.setKey(qt.QKeySequence("Space"))
-      self.shortcutContour.connect('activated()', self.onCaptureContour)
+    self.shortcutContour = qt.QShortcut(slicer.util.mainWindow())
+    self.shortcutContour.setKey(qt.QKeySequence("Space"))
+    self.shortcutContour.connect('activated()', self.onCaptureContour)
 
+    self.confirmComboSelections()
+
+  def onParticipantComboBoxChanged(self):
+    self.confirmComboSelections()
+
+  def onTrialComboBoxChanged(self):
+    self.confirmComboSelections()
 
   def onStartTrial(self):
 
@@ -183,9 +193,14 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.currentTrialName = self.ui.participantComboBox.currentText + "_" + self.ui.patientComboBox.currentText + "_Trial_" + self.ui.trialComboBox.currentText
 
     fid_name = self.currentTrialName
-    print("Name: " + fid_name)
+    # print("Name: " + fid_name)
     f = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", fid_name)
     f.GetDisplayNode().PointLabelsVisibilityOff()
+
+    #Reenable end trial / capture contour, disable start trial
+    self.ui.startTrialButton.enabled = False
+    self.ui.endTrialButton.enabled = True
+    self.ui.captureContourButton.enabled = True
 
 
   def onEndTrial(self):
@@ -193,6 +208,18 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.trialLength = time.time() - self.trialStartTime
 
     self.saveTrialDetails()
+    self.resetUserTesting()
+    self.confirmComboSelections()
+
+  def resetUserTesting(self):
+    #Start by removing all trial specific info. Goal is to switch to trial number None
+    f = slicer.mrmlScene.GetNodesByClassByName("vtkMRMLMarkupsFiducialNode", self.currentTrialName).GetItemAsObject(0)
+    slicer.mrmlScene.RemoveNode(f)
+    prostate = slicer.mrmlScene.GetNodesByClassByName("vtkMRMLModelNode", "Prostate").GetItemAsObject(0)
+    slicer.mrmlScene.RemoveNode(prostate)
+
+    #Change the index of trial number to None
+    self.ui.trialComboBox.setCurrentIndex(0)
 
 
   def saveTrialDetails(self):
@@ -225,7 +252,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logFile.write("Patient Volume:     " + self.ui.patientComboBox.currentText + "\n")
     logFile.write("Trial Number:       " + self.ui.trialComboBox.currentText + "\n\n")
     logFile.write("Time of Completion: " + str(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())) + "\n")
-    logFile.write("Duration of Trial:  " + str(round(self.trialLength,1)) + "seconds \n")
+    logFile.write("Duration of Trial:  " + str(round(self.trialLength,1)) + " seconds \n")
     logFile.write("Number of Contours: " + str(self.numContours) + "\n")
     logFile.close()
 
@@ -234,6 +261,33 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.logic.captureContour()
     self.numContours = self.numContours + 1
+
+  #This section handles disabling / enabling buttons / comboboxs based on what is selected
+  def confirmComboSelections(self):
+
+    self.ui.infoLabel.setText("")
+
+    participant = self.ui.participantComboBox.currentText
+    ptVolume = self.ui.patientComboBox.currentText
+    trialNumber = self.ui.trialComboBox.currentText
+
+    if participant != "None" and ptVolume != "None" and trialNumber != "None":
+      self.ui.startTrialButton.enabled = True
+      self.ui.endTrialButton.enabled = False
+      self.ui.captureContourButton.enabled = False
+
+      #Check whether this trial has been performed already by checking if the directory exists
+      potentialTrialName = self.ui.participantComboBox.currentText + "_" + self.ui.patientComboBox.currentText + "_Trial_" + self.ui.trialComboBox.currentText
+      potentialOutputPath = os.path.join(self.moduleDirPath, "TrialResults", potentialTrialName)
+      if os.path.exists(potentialOutputPath):
+        self.ui.infoLabel.setText("NOTE: This trial has already been completed!")
+
+
+    else:
+      self.ui.startTrialButton.enabled = False
+      self.ui.endTrialButton.enabled = False
+      self.ui.captureContourButton.enabled = False
+
 
 
   def placeIcons(self):
@@ -465,7 +519,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     #Get the current location of the slider
     sliderVal = self.ui.biopsyDepthSlider.value
-    print("Slider value: " + str(sliderVal))
+    # print("Slider value: " + str(sliderVal))
 
     self.logic.moveBiopsy(sliderVal)
 
@@ -629,7 +683,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
       moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
       biopsySavePath = os.path.join(moduleDir, "Resources", "UserData", currentUser, filename)
 
-      print("save path: " + biopsySavePath)
+      # print("save path: " + biopsySavePath)
 
       #save the scene to file
       slicer.util.saveScene(biopsySavePath)
@@ -637,13 +691,13 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
   def loadScene(self, filename, currentUser):
 
-    print("filename: " + filename)
+    # print("filename: " + filename)
 
     # Append to current directory
     moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
     biopsySavePath = os.path.join(moduleDir, "Resources", "UserData", currentUser, filename)
 
-    print("biopsySavePath: " + biopsySavePath)
+    # print("biopsySavePath: " + biopsySavePath)
 
     # save the scene to file
     slicer.util.loadScene(biopsySavePath)
@@ -662,7 +716,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     #Change layouts to the debug layout
     # self.debuggingLayout()
     self.splitSliceViewer()
-    print("Starting reconstruction")
+    # print("Starting reconstruction")
 
     #Get the current directory
     moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
@@ -913,9 +967,9 @@ self.getSeg(imageData)
     n.GetMatrixTransformToWorld(resliced4x4)
     for i in range(0, len(idx), 15):
       pt = [idx[i][0][0], idx[i][0][1], 0, 1]
-      print("before transform: " + str(pt))
+      # print("before transform: " + str(pt))
       transformedPt = resliced4x4.MultiplyPoint(pt)
-      print("after transform: " + str(transformedPt))
+      # print("after transform: " + str(transformedPt))
       slicer.modules.markups.logic().AddFiducial(transformedPt[0], transformedPt[1], transformedPt[2])
 
   def polyDataToModel(self, modelName = "Prostate"):
@@ -938,18 +992,18 @@ self.getSeg(imageData)
     if (fiducialNode != None) and (prostateModel != None) and (mtmlogic != None):
       mtmlogic.UpdateClosedSurfaceModel(fiducialNode, prostateModel)
 
-  def modelToSTL(self, depth):
-    n = slicer.util.getNode("Prostate")
-    normals = n.GetPolyData().GetPointData().GetNormals()
-    pts = n.GetPolyData().GetPoints().GetData()
-    pts_np = vtk.util.numpy_support.vtk_to_numpy(pts)
-
+  def modelToSTL(self, depth=5, width=5):
+    f = slicer.mrmlScene.GetNodesByClass("vtkMRMLMarkupsFiducialNode").GetItemAsObject(0)
+    pts_np = []
+    for i in range(f.GetNumberOfControlPoints()):
+      pts_np.append(tuple(f.GetNthControlPointPositionVector(i)))
     pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(pts_np)
-    pcd.normals = o3d.utility.Vector3dVector(normals)
+    pcd.points = o3d.utility.Vector3dVector(np.array(pts_np))
+    pcd.estimate_normals()
+    pcd.orient_normals_consistent_tangent_plane(100)
 
-    poisson_mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=depth, width=0, scale=1.1, linear_fit=False)[0]
-    # o3d.visualization.draw_geometries([poisson_mesh])
+    poisson_mesh, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=depth, width=width)
+    o3d.visualization.draw_geometries([poisson_mesh])
 
     outputPath = "C:\\repos\\TRUS_Trainer\\TrackedTRUSSim\\TrackedTRUSSim\\Resources\\models\\"
     poisson_mesh = o3d.geometry.TriangleMesh.compute_triangle_normals(poisson_mesh)
@@ -1130,8 +1184,8 @@ self.getSeg(imageData)
 
     capturedImage = wti.GetOutput()
     cols, rows, _ = capturedImage.GetDimensions()
-    print("columns: " + str(cols))
-    print("rows: " + str(rows))
+    # print("columns: " + str(cols))
+    # print("rows: " + str(rows))
     sc = capturedImage.GetPointData().GetScalars()
     npImage = vtk_to_numpy(sc)
     npImage = npImage.reshape(rows, cols, -1)
@@ -1256,7 +1310,7 @@ self.getSeg(imageData)
     #Get parameter containing all the role IDs
     biopsyTransformRolesNode = caseNode.GetParameter(self.BIOPSY_TRANSFORM_ROLES)
 
-    print(str(biopsyTransformRolesNode))
+    # print(str(biopsyTransformRolesNode))
 
     #If there are no biopsy transforms exit the function
     if biopsyTransformRolesNode is '':
@@ -1537,7 +1591,7 @@ self.getSeg(imageData)
     parameterNode = self.getParameterNode()
     caseNode = self.getCaseNode()
 
-    print("casenode: ")
+    # print("casenode: ")
 
     moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
 
