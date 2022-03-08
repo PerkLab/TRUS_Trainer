@@ -18,6 +18,7 @@ import time
 
 #
 # TrackedTRUSSim
+
 #
 
 #TODO
@@ -131,12 +132,18 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.startReconstructionButton.connect('clicked(bool)', self.onStartReconstruction)
     self.ui.stopReconstructionButton.connect('clicked(bool)', self.onStopReconstruction)
 
-    self.ui.participantComboBox.currentIndexChanged.connect(self.onParticipantComboBoxChanged)
     self.ui.patientComboBox.currentIndexChanged.connect(self.onPatientComboBoxChanged)
     self.ui.trialComboBox.currentIndexChanged.connect(self.onTrialComboBoxChanged)
     self.ui.startTrialButton.connect('clicked(bool)', self.onStartTrial)
     self.ui.endTrialButton.connect('clicked(bool)', self.onEndTrial)
     self.ui.captureContourButton.connect('clicked(bool)', self.onCaptureContour)
+
+    self.ui.selectParticipantButton.connect('clicked(bool)', self.onSelectParticipant)
+    self.ui.practiceCompleteButton.connect('clicked(bool)', self.onPracticeComplete)
+    self.ui.generateModelButton.connect('clicked(bool)', self.onGenerateModel)
+    self.ui.generateModelPracticeButton.connect('clicked(bool)', self.onGenerateModel)
+    self.ui.captureContourPracticeButton.connect('clicked(bool)', self.onCaptureContour)
+    self.ui.resetContoursButton.connect('clicked(bool)', self.onResetContours)
 
     self.eventFilter = MainWidgetEventFilter(self)
     slicer.util.mainWindow().installEventFilter(self.eventFilter)
@@ -152,14 +159,68 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     #Create a flag to indicate whether reconstruction is ongoing
     self.reconstructionFlag = False
-    self.confirmComboSelections()
+    self.numContours = 0
 
+    #Start by hiding all the panels except for the first one
+    self.ui.stepOneGroupBox.show()
+    self.ui.stepTwoGroupBox.hide()
+    self.ui.stepThreeGroupBox.hide()
+    self.ui.stepFourGroupBox.hide()
+
+  def onGenerateModelPractice(self):
+
+    if self.numContours < 3:
+      self.ui.modelWarningPracticeLabel.setText("Not enough contours: Minimum 3 required.")
+    else:
+      self.logic.modelToSTL()
+
+  def onGenerateModel(self):
+
+    if self.numContours < 3:
+      self.ui.modelWarningLabel.setText("Not enough contours: Minimum 3 required.")
+    else:
+      self.logic.modelToSTL()
+
+
+  def onSelectParticipant(self):
+    self.participant = self.ui.participantComboBox.currentText
+    self.ui.stepOneGroupBox.hide()
+    self.ui.stepTwoGroupBox.show()
+    self.practiceStarted = time.time()
+    self.startPractice()
+
+  def startPractice(self):
+    # load the appropriate transforms
+    self.logic.setupPractice()
+
+    self.logic.startReconstruction()
+    self.reconstructionFlag = True
+    self.numContours = 0
+
+    self.currentTrialName = "Practice"
+    f = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.currentTrialName)
+    f.GetDisplayNode().PointLabelsVisibilityOff()
+    self.numContours = 0
+
+  def onPracticeComplete(self):
+    self.practiceLength = time.time() - self.practiceStarted
+    self.ui.stepTwoGroupBox.hide()
+    self.ui.stepThreeGroupBox.show()
+    self.logic.cleanupPracticeItems()
+    self.resetUserTesting()
+    self.logic.removeProstateModel()
+
+  def onResetContours(self, practice=False):
+    self.numContours = 0
+    self.resetUserTesting()
+    self.currentTrialName = "Practice"
+    f = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.currentTrialName)
+    f.GetDisplayNode().PointLabelsVisibilityOff()
+
+    #Also remove the model and meshToRAS transform to fully reset
+    self.logic.removeProstateModel()
 
   def onPatientComboBoxChanged(self):
-
-    #If reconstruction is already ongoing, pause while we change volumes
-    if self.reconstructionFlag:
-      self.logic.stopReconstruction()
 
     # get current case, recognizing that the cases that we use start from 8 onward
     case = self.ui.patientComboBox.currentIndex + 7
@@ -169,20 +230,11 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # load the appropriate transforms
     self.logic.setupCase(case)
 
-    self.logic.startReconstruction()
-    self.reconstructionFlag = True
-
-    self.shortcutContour = qt.QShortcut(slicer.util.mainWindow())
-    self.shortcutContour.setKey(qt.QKeySequence("Space"))
-    self.shortcutContour.connect('activated()', self.onCaptureContour)
-
-    self.confirmComboSelections()
-
-  def onParticipantComboBoxChanged(self):
-    self.confirmComboSelections()
+    self.confirmTrialSelections()
 
   def onTrialComboBoxChanged(self):
-    self.confirmComboSelections()
+    self.confirmTrialSelections()
+
 
   def onStartTrial(self):
 
@@ -198,9 +250,12 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     f.GetDisplayNode().PointLabelsVisibilityOff()
 
     #Reenable end trial / capture contour, disable start trial
-    self.ui.startTrialButton.enabled = False
-    self.ui.endTrialButton.enabled = True
-    self.ui.captureContourButton.enabled = True
+    self.ui.stepThreeGroupBox.hide()
+    self.ui.stepFourGroupBox.show()
+
+    self.shortcutContour = qt.QShortcut(slicer.util.mainWindow())
+    self.shortcutContour.setKey(qt.QKeySequence("Space"))
+    self.shortcutContour.connect('activated()', self.onCaptureContour)
 
 
   def onEndTrial(self):
@@ -209,9 +264,16 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.saveTrialDetails()
     self.resetUserTesting()
-    self.confirmComboSelections()
+    self.confirmTrialSelections()
+    self.logic.removeProstateModel()
+
+    self.ui.stepThreeGroupBox.show()
+    self.ui.stepFourGroupBox.hide()
+
+    self.numContours = 0
 
   def resetUserTesting(self):
+    print("Current trial name: " + self.currentTrialName)
     #Start by removing all trial specific info. Goal is to switch to trial number None
     f = slicer.mrmlScene.GetNodesByClassByName("vtkMRMLMarkupsFiducialNode", self.currentTrialName).GetItemAsObject(0)
     slicer.mrmlScene.RemoveNode(f)
@@ -259,11 +321,14 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onCaptureContour(self):
 
+    print("CaptureContour Activated")
+
     self.logic.captureContour()
     self.numContours = self.numContours + 1
+    self.ui.numContoursLabel.setText("Number of contours: " + str(self.numContours))
 
   #This section handles disabling / enabling buttons / comboboxs based on what is selected
-  def confirmComboSelections(self):
+  def confirmTrialSelections(self):
 
     self.ui.infoLabel.setText("")
 
@@ -272,21 +337,21 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     trialNumber = self.ui.trialComboBox.currentText
 
     if participant != "None" and ptVolume != "None" and trialNumber != "None":
-      self.ui.startTrialButton.enabled = True
-      self.ui.endTrialButton.enabled = False
-      self.ui.captureContourButton.enabled = False
+      # self.ui.startTrialButton.enabled = True
+      # self.ui.endTrialButton.enabled = False
+      # self.ui.captureContourButton.enabled = False
 
       #Check whether this trial has been performed already by checking if the directory exists
       potentialTrialName = self.ui.participantComboBox.currentText + "_" + self.ui.patientComboBox.currentText + "_Trial_" + self.ui.trialComboBox.currentText
       potentialOutputPath = os.path.join(self.moduleDirPath, "TrialResults", potentialTrialName)
       if os.path.exists(potentialOutputPath):
         self.ui.infoLabel.setText("NOTE: This trial has already been completed!")
-
-
-    else:
-      self.ui.startTrialButton.enabled = False
-      self.ui.endTrialButton.enabled = False
-      self.ui.captureContourButton.enabled = False
+    #
+    #
+    # else:
+    #   # self.ui.startTrialButton.enabled = False
+    #   # self.ui.endTrialButton.enabled = False
+    #   # self.ui.captureContourButton.enabled = False
 
 
 
@@ -588,7 +653,6 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   #Model names
   PROBE_MODEL = "ProbeModel"
   PHANTOM_MODEL = "PhantomModel"
-  CYLINDER_MODEL = "CylinderModel"
   TRUS_VOLUME = "TRUSVolume"
   ZONE_SEGMENTATION = "ZoneSegmentation"
   BIOPSY_MODEL = "BiopsyModel"
@@ -607,6 +671,10 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   BIOPSY_TRANSFORM_ROLES = "BiopsyTransformRoles"
   ULTRASOUND_SIM_VOLUME = "UltrasoundSimVolume"
   PROSTATE_CAPSULE_MODEL = "ProstateCapsuleModel"
+
+  TRAININGMODEL_TO_RAS = "TrainingModelToRAS"
+  MESH_MODEL = "MeshModel"
+  MESH_TO_RAS = "MeshToRAS"
 
   def __init__(self):
     """
@@ -845,55 +913,6 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     ultrasoundSimVolume = parameterNode.GetNodeReference(self.ULTRASOUND_SIM_VOLUME)
     ultrasoundSimVolume.SetAndObserveImageData(sliceImageData)
 
-
-  # def getSeg(self, imageData):
-  #   parameterNode = self.getParameterNode() #**
-  #   scan = slicer.util.getNode("TRUSVolume")
-  #   self.npImage = imageData
-  #   self.segmentation = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
-  #   self.segmentation.SetName('seg')
-  #   self.padL = int(np.ceil((510 - self.npImage.shape[0]) / 2)) - np.mod(self.npImage.shape[0], 2)
-  #   self.padR = int(np.ceil((510 - self.npImage.shape[0]) / 2))
-  #   self.padU = int(np.ceil((788 - self.npImage.shape[1]) / 2)) - np.mod(self.npImage.shape[1], 2)
-  #   self.padD = int(np.ceil((788 - self.npImage.shape[1]) / 2))
-  #   spacing = scan.GetSpacing()
-  #   self.shift.SetElement(1, 3, -2*self.padL)
-  #   self.shift.SetElement(0, 3, -2*self.padU)
-  #   self.shiftTransform.SetMatrixTransformToParent(self.shift)
-  #   self.shiftTransform.SetName('Shift')
-  #   slicer.util.getNode('UltrasoundSimVolume').GetIJKToRASMatrix(self.ijkToRasMat)
-  #   self.ijktoRasTransform.SetMatrixTransformToParent(self.ijkToRasMat)
-  #   self.newIm = np.pad(self.npImage, ((self.padL, self.padR), (self.padU, self.padD)), mode='constant')
-  #   self.newIm = img_as_float(self.newIm)
-  #   self.Immean = np.mean(self.newIm)
-  #   self.Imstd = np.std(self.newIm)
-  #   self.newIm -= self.Immean
-  #   self.newIm /= self.Imstd
-  #   rows = cols = 256
-  #   rimg = resize(self.newIm, (rows, cols), preserve_range=True)
-  #   rimgs = np.expand_dims(rimg, axis=0)
-  #   rimgs = np.expand_dims(rimgs, axis=3)
-  #   out = self.UNetModel.predict(rimgs)
-  #   self.o = np.squeeze(out)
-  #   self.mskout = resize(self.o, (510, 788), preserve_range=True)
-  #   slicer.util.updateVolumeFromArray(self.segmentation, np.expand_dims(self.mskout, axis=0))
-  #   self.ijktoRasTransform.SetAndObserveTransformNodeID(self.shiftTransform.GetID())
-  #   self.reslicedNode.SetAndObserveTransformNodeID(self.ijktoRasTransform.GetID())
-  #   self.segmentation.SetAndObserveTransformNodeID(self.reslicedNode.GetID())
-  #   # self.segmentation.HardenTransform()
-  #   self.segLog.ImportLabelmapToSegmentationNode(self.segmentation, self.prostateSeg)
-  #   self.segLog.ExportAllSegmentsToModels(self.prostateSeg, 1)
-  #   Mods = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLModelNode', 'seg')
-  #   self.segMod = Mods.GetItemAsObject(0)
-  #   polydata = self.segMod.GetPolyData()
-  #   self.APD.AddInputData(polydata)
-  #   self.APD.Update()
-  #   # self.prostateSeg.RemoveSegment('seg')
-  #   slicer.mrmlScene.RemoveNode(self.segMod)
-  #   USSimVolumeToShift = parameterNode.GetNodeReference(self.USSIMVOLUME_TO_SHIFT)  # **
-  #   self.shiftTransform.SetAndObserveTransformNodeID(USSimVolumeToShift.GetID())  # **
-  #   # slicer.mrmlScene.RemoveNode(self.segmentation)
-
     '''
 import numpy as np
 self = slicer.mymod
@@ -992,7 +1011,12 @@ self.getSeg(imageData)
     if (fiducialNode != None) and (prostateModel != None) and (mtmlogic != None):
       mtmlogic.UpdateClosedSurfaceModel(fiducialNode, prostateModel)
 
-  def modelToSTL(self, depth=5, width=5):
+  def modelToSTL(self, depth=5, width=5, showModel=True):
+
+    #Get the parameter node
+    parameterNode = self.getParameterNode()
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+
     f = slicer.mrmlScene.GetNodesByClass("vtkMRMLMarkupsFiducialNode").GetItemAsObject(0)
     pts_np = []
     for i in range(f.GetNumberOfControlPoints()):
@@ -1003,12 +1027,39 @@ self.getSeg(imageData)
     pcd.orient_normals_consistent_tangent_plane(100)
 
     poisson_mesh, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=depth, width=width)
-    o3d.visualization.draw_geometries([poisson_mesh])
+    # poisson_mesh.is_watertight()
+    # o3d.visualization.draw_geometries([poisson_mesh])
 
     outputPath = "C:\\repos\\TRUS_Trainer\\TrackedTRUSSim\\TrackedTRUSSim\\Resources\\models\\"
     poisson_mesh = o3d.geometry.TriangleMesh.compute_triangle_normals(poisson_mesh)
     o3d.io.write_triangle_mesh(outputPath + "mesh.stl", poisson_mesh)
 
+    if showModel:
+
+      self.removeProstateModel()
+
+      #Load in MeshToRAS as well
+      meshToRAS = parameterNode.GetNodeReference(self.MESH_TO_RAS)
+      if meshToRAS is None:
+        meshToRASPath = os.path.join(moduleDir, "Resources", "transforms", "MeshToRAS.h5")
+        meshToRAS = slicer.util.loadTransform(meshToRASPath)
+        parameterNode.SetNodeReferenceID(self.MESH_TO_RAS, meshToRAS.GetID())
+        meshToRAS.SetSaveWithScene(False)
+
+      meshPath = os.path.join(outputPath, "mesh.stl")
+      meshModel = slicer.util.loadModel(meshPath)
+      meshModel.SetName(self.MESH_MODEL)
+      parameterNode.SetNodeReferenceID(self.MESH_MODEL, meshModel.GetID())
+      meshModel.SetAndObserveTransformNodeID(meshToRAS.GetID())
+
+
+  def removeProstateModel(self):
+
+    parameterNode = self.getParameterNode()
+
+    meshModel = parameterNode.GetNodeReference(self.MESH_MODEL)
+    if meshModel != None:
+      slicer.mrmlScene.RemoveNode(meshModel)
 
   def resliceToNPImage(self, volume, slice):
     layoutManager = slicer.app.layoutManager()
@@ -1478,6 +1529,17 @@ self.getSeg(imageData)
 
     #TODO: Make blank slice visible in the absence of a TRUS volume
 
+  def showUS_Sim(self):
+    viewNode = slicer.mrmlScene.GetSingletonNode("US_Sim", "vtkMRMLSliceNode")
+    viewWidget = slicer.qMRMLSliceWidget()
+    viewWidget.setMRMLScene(slicer.mrmlScene)
+    viewWidget.setMRMLSliceNode(viewNode)
+    sliceLogics = slicer.app.applicationLogic().GetSliceLogics()
+    viewWidget.setSliceLogics(sliceLogics)
+    sliceLogics.AddItem(viewWidget.sliceLogic())
+    viewWidget.show()
+    input("waiting until you're done")
+
   def setupResliceDriver(self, sliceName):
     """
     Drive yellow slice based on position of pointer tip
@@ -1583,6 +1645,104 @@ self.getSeg(imageData)
       USSimVolumeToShift.SetSaveWithScene(False)
     USSimVolumeToShift.SetAndObserveTransformNodeID(imageToProbe.GetID())
 
+
+  def setupPractice(self):
+
+    parameterNode = self.getParameterNode()
+    caseNode = self.getCaseNode()
+
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+
+    #Load the TRUS volume
+    trusVolume = caseNode.GetNodeReference(self.TRUS_VOLUME)
+    if trusVolume != None:
+      slicer.mrmlScene.RemoveNode(trusVolume)
+    trusPath = os.path.join(moduleDir, "Resources", "registered_zones", "Patient_2", "TRUS.nrrd")
+    trusVolume = slicer.util.loadVolume(trusPath)
+    trusVolume.SetName(self.TRUS_VOLUME)
+    caseNode.SetNodeReferenceID(self.TRUS_VOLUME, trusVolume.GetID())
+
+    #Replace phantomToRAS with the one for this practice trial
+    phantomToRAS = parameterNode.GetNodeReference(self.PHANTOM_TO_RAS)
+    slicer.mrmlScene.RemoveNode(phantomToRAS)
+    phantomToRASPath = os.path.join(moduleDir, "Resources", "registered_zones", "Patient_2", "PhantomToRAS.h5")
+    phantomToRAS = slicer.util.loadTransform(phantomToRASPath)
+    parameterNode.SetNodeReferenceID(self.PHANTOM_TO_RAS, phantomToRAS.GetID())
+    phantomToRAS.SetSaveWithScene(False)
+
+    #Add back all the relevant models / transforms to PhantomToRAS
+    phantomModelToReference = parameterNode.GetNodeReference(self.PHANTOMMODEL_TO_REFERENCE)
+    phantomModelToReference.SetAndObserveTransformNodeID(phantomToRAS.GetID())
+    probeToPhantom = parameterNode.GetNodeReference(self.PROBE_TO_PHANTOM)
+    probeToPhantom.SetAndObserveTransformNodeID(phantomToRAS.GetID())
+    pointerToPhantom = parameterNode.GetNodeReference(self.POINTER_TO_PHANTOM)
+    pointerToPhantom.SetAndObserveTransformNodeID(phantomToRAS.GetID())
+
+    #Set the foreground and background of the red and simulation slices
+    layoutManager = slicer.app.layoutManager()
+    usMaskVolume = parameterNode.GetNodeReference(self.MASK_VOLUME)
+    compositeNodeRed = layoutManager.sliceWidget("Red").sliceLogic().GetSliceCompositeNode()
+    compositeNodeSim = layoutManager.sliceWidget("US_Sim").sliceLogic().GetSliceCompositeNode()
+
+    compositeNodeRed.SetBackgroundVolumeID(usMaskVolume.GetID())
+    compositeNodeRed.SetForegroundVolumeID(trusVolume.GetID())
+    compositeNodeRed.SetForegroundOpacity(1)
+    self.setupResliceDriver("Red")
+    layoutManager.sliceWidget("Red").sliceLogic().FitSliceToAll()
+
+    compositeNodeSim.SetBackgroundVolumeID(usMaskVolume.GetID())
+    compositeNodeSim.SetForegroundVolumeID(trusVolume.GetID())
+    compositeNodeSim.SetForegroundOpacity(1)
+    self.setupResliceDriver("US_Sim")
+    layoutManager.sliceWidget("US_Sim").sliceLogic().FitSliceToAll()
+
+    #Make the simulated ultrasound node visible in 3D
+    sliceNodeSim = slicer.app.layoutManager().sliceWidget("US_Sim").mrmlSliceNode()
+    sliceNodeSim.SetSliceVisible(True)
+
+    #Get the US Mask display node
+    usMaskVolume = parameterNode.GetNodeReference(self.MASK_VOLUME)
+    usDispNode = usMaskVolume.GetDisplayNode()
+
+    #Apply a threshold that gets rid of the US fan but keeps the outline
+    usDispNode.ApplyThresholdOn()
+    usDispNode.SetLowerThreshold(50)
+    usDispNode.SetUpperThreshold(600)
+
+  def cleanupPracticeItems(self):
+
+    parameterNode = self.getParameterNode()
+    caseNode = self.getCaseNode()
+
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+
+    #Get rid of the training volume
+    trainingModel = caseNode.GetNodeReference(self.TRUS_VOLUME)
+    slicer.mrmlScene.RemoveNode(trainingModel)
+
+    #Replace phantomToRAS with the one for this practice trial
+    phantomToRAS = parameterNode.GetNodeReference(self.PHANTOM_TO_RAS)
+    slicer.mrmlScene.RemoveNode(phantomToRAS)
+    phantomToRASPath = os.path.join(moduleDir, "Resources", "transforms", "PhantomToRAS.h5")
+    phantomToRAS = slicer.util.loadTransform(phantomToRASPath)
+    parameterNode.SetNodeReferenceID(self.PHANTOM_TO_RAS, phantomToRAS.GetID())
+    phantomToRAS.SetSaveWithScene(False)
+
+    #Add back all the relevant models / transforms to PhantomToRAS
+    phantomModelToReference = parameterNode.GetNodeReference(self.PHANTOMMODEL_TO_REFERENCE)
+    phantomModelToReference.SetAndObserveTransformNodeID(phantomToRAS.GetID())
+    probeToPhantom = parameterNode.GetNodeReference(self.PROBE_TO_PHANTOM)
+    probeToPhantom.SetAndObserveTransformNodeID(phantomToRAS.GetID())
+    pointerToPhantom = parameterNode.GetNodeReference(self.POINTER_TO_PHANTOM)
+    pointerToPhantom.SetAndObserveTransformNodeID(phantomToRAS.GetID())
+
+    # #Get rid of the fiducials node added, as well as any remaining Prostate model node
+    f = slicer.mrmlScene.GetNodesByClassByName("vtkMRMLMarkupsFiducialNode", "Practice").GetItemAsObject(0)
+    if f is not None:
+      slicer.mrmlScene.RemoveNode(f)
+    prostate = slicer.mrmlScene.GetNodesByClassByName("vtkMRMLModelNode", "Prostate").GetItemAsObject(0)
+    if prostate is not None:
+      slicer.mrmlScene.RemoveNode(prostate)
 
   def setupCase(self, case):
 

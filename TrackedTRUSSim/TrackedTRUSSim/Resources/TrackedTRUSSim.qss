@@ -2,7 +2,6 @@ QWidget
 {
     background-color: #353535;
     color: #FFFFFF;
-    font-size: 16pt
 }
 
 QWidget:focus {
@@ -29,6 +28,11 @@ QPushButton:pressed
   background-color: #17A3DB;
 }
 
+QLabel
+{
+  background-color: #414c59;
+}
+
 QPushButton:hover
 {
   border: 2px solid #DDDEDA;
@@ -43,6 +47,12 @@ ctkComboBox
 {
   color: #DDDEDA;
   background-color: #216E9B;
+}
+
+QGroupBox
+{
+  background-color: #414c59;
+  border-color: white
 }
 
 ctkCheckBox
