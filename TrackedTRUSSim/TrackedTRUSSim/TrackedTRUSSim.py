@@ -144,6 +144,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.generateModelPracticeButton.connect('clicked(bool)', self.onGenerateModel)
     self.ui.captureContourPracticeButton.connect('clicked(bool)', self.onCaptureContour)
     self.ui.resetContoursButton.connect('clicked(bool)', self.onResetContours)
+    self.ui.beginPracticeButton.connect('clicked(bool)', self.onBeginPractice)
 
     self.eventFilter = MainWidgetEventFilter(self)
     slicer.util.mainWindow().installEventFilter(self.eventFilter)
@@ -154,6 +155,9 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #Open base models / transforms
     self.logic.setupParameterNode()
 
+    #Hide the models for now
+    self.logic.hideModels()
+
     #Setup icons
     self.placeIcons()
 
@@ -162,10 +166,12 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.numContours = 0
 
     #Start by hiding all the panels except for the first one
-    self.ui.stepOneGroupBox.show()
-    self.ui.stepTwoGroupBox.hide()
-    self.ui.stepThreeGroupBox.hide()
-    self.ui.stepFourGroupBox.hide()
+    self.ui.idGroupBox.show()
+    self.ui.exampleGroupBox.hide()
+    self.ui.practiceGroupBox.hide()
+    self.ui.trialInfoGroupBox.hide()
+    self.ui.performTrialGroupBox.hide()
+    self.ui.surveyGroupBox.hide()
 
   def onGenerateModelPractice(self):
 
@@ -181,13 +187,19 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     else:
       self.logic.modelToSTL()
 
+  def onBeginPractice(self):
+    self.logic.removeExamples()
+    self.logic.showModels()
+    self.ui.exampleGroupBox.hide()
+    self.ui.practiceGroupBox.show()
+    self.practiceStarted = time.time()
+    self.startPractice()
 
   def onSelectParticipant(self):
     self.participant = self.ui.participantComboBox.currentText
-    self.ui.stepOneGroupBox.hide()
-    self.ui.stepTwoGroupBox.show()
-    self.practiceStarted = time.time()
-    self.startPractice()
+    self.ui.idGroupBox.hide()
+    self.ui.exampleGroupBox.show()
+    self.logic.loadExamples()
 
   def startPractice(self):
     # load the appropriate transforms
@@ -204,8 +216,8 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onPracticeComplete(self):
     self.practiceLength = time.time() - self.practiceStarted
-    self.ui.stepTwoGroupBox.hide()
-    self.ui.stepThreeGroupBox.show()
+    self.ui.practiceGroupBox.hide()
+    self.ui.trialInfoGroupBox.show()
     self.logic.cleanupPracticeItems()
     self.resetUserTesting()
     self.logic.removeProstateModel()
@@ -251,8 +263,8 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     f.GetDisplayNode().PointLabelsVisibilityOff()
 
     #Reenable end trial / capture contour, disable start trial
-    self.ui.stepThreeGroupBox.hide()
-    self.ui.stepFourGroupBox.show()
+    self.ui.trialInfoGroupBox.hide()
+    self.ui.performTrialGroupBox.show()
 
     self.shortcutContour = qt.QShortcut(slicer.util.mainWindow())
     self.shortcutContour.setKey(qt.QKeySequence("Space"))
@@ -268,8 +280,8 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.confirmTrialSelections()
     self.logic.removeProstateModel()
 
-    self.ui.stepThreeGroupBox.show()
-    self.ui.stepFourGroupBox.hide()
+    self.ui.trialInfoGroupBox.show()
+    self.ui.performTrialGroupBox.hide()
 
     self.numContours = 0
 
@@ -684,6 +696,15 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   MESH_MODEL = "MeshModel"
   MESH_TO_RAS = "MeshToRAS"
 
+  #Example volumes / transforms
+  P23_MODEL = "P23_Model"
+  P32_MODEL = "P32_Model"
+  P43_MODEL = "P43_Model"
+  P32_TO_RAS = "P32ToRAS"
+  P43_TO_RAS = "P43ToRAS"
+
+
+
   def __init__(self):
     """
     Called when the logic class is instantiated. Can be used for initializing member variables.
@@ -800,10 +821,10 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
 
     #Store the fiducials as class attributes to speed up callback ****
-    self.anchorFids = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLMarkupsFiducialNode', 'Anchor_Fids').GetItemAsObject(0)
-    self.mobileFids = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLMarkupsFiducialNode', 'Mobile_Fids').GetItemAsObject(0)
-    self.probeTipFids = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLMarkupsFiducialNode', 'Anchor_Fids').GetItemAsObject(0)
-    self.numFids = self.anchorFids.GetNumberOfFiducials()
+    # self.anchorFids = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLMarkupsFiducialNode', 'Anchor_Fids').GetItemAsObject(0)
+    # self.mobileFids = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLMarkupsFiducialNode', 'Mobile_Fids').GetItemAsObject(0)
+    # self.probeTipFids = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLMarkupsFiducialNode', 'Anchor_Fids').GetItemAsObject(0)
+    # self.numFids = self.anchorFids.GetNumberOfFiducials()
     # ********
 
     # Start by hiding intersecting volumes and slice view annotations
@@ -929,12 +950,12 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     ultrasoundSimVolume.SetAndObserveImageData(sliceImageData)
 
     #Determine whether the tip of the probe is within a set distance of the volume
-    probeTipPosition = [0,0,0]
-    centerOfBorePosition = [0,0,0]
-    self.probeTipFids.GetNthControlPointPositionWorld(0, probeTipPosition)
-    self.anchorFids.GetNthControlPointPositionWorld(self.numFids-1, centerOfBorePosition)
-    euclidDist = np.linalg.norm(np.array(probeTipPosition)-np.array(centerOfBorePosition))
-    print("euclid dist: " + str(euclidDist))
+    # probeTipPosition = [0,0,0]
+    # centerOfBorePosition = [0,0,0]
+    # self.probeTipFids.GetNthControlPointPositionWorld(0, probeTipPosition)
+    # self.anchorFids.GetNthControlPointPositionWorld(self.numFids-1, centerOfBorePosition)
+    # euclidDist = np.linalg.norm(np.array(probeTipPosition)-np.array(centerOfBorePosition))
+    # print("euclid dist: " + str(euclidDist))
 
 
     '''
@@ -1669,6 +1690,74 @@ self.getSeg(imageData)
       USSimVolumeToShift.SetSaveWithScene(False)
     USSimVolumeToShift.SetAndObserveTransformNodeID(imageToProbe.GetID())
 
+  def hideModels(self):
+    parameterNode = self.getParameterNode()
+
+    probeModel = parameterNode.GetNodeReference(self.PROBE_MODEL)
+    phantomModel = parameterNode.GetNodeReference(self.PHANTOM_MODEL)
+    biopsyModel = parameterNode.GetNodeReference(self.BIOPSY_MODEL)
+    biopsyTrajectoryModel = parameterNode.GetNodeReference(self.BIOPSY_TRAJECTORY_MODEL)
+
+    probeModel.GetDisplayNode().SetVisibility(False)
+    phantomModel.GetDisplayNode().SetVisibility(False)
+    biopsyModel.GetDisplayNode().SetVisibility(False)
+    biopsyTrajectoryModel.GetDisplayNode().SetVisibility(False)
+
+  def showModels(self):
+    parameterNode = self.getParameterNode()
+
+    probeModel = parameterNode.GetNodeReference(self.PROBE_MODEL)
+    phantomModel = parameterNode.GetNodeReference(self.PHANTOM_MODEL)
+
+    probeModel.GetDisplayNode().SetVisibility(True)
+    phantomModel.GetDisplayNode().SetVisibility(True)
+
+  def loadExamples(self):
+    parameterNode = self.getParameterNode()
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+    samplePath = os.path.join(moduleDir, "Resources", "registered_zones", "SampleReconstructions")
+
+    p32ToRASPath = os.path.join(samplePath, "P32ToRAS.h5")
+    p32ToRAS = slicer.util.loadTransform(p32ToRASPath)
+    parameterNode.SetNodeReferenceID(self.P32_TO_RAS, p32ToRAS.GetID())
+    p32ToRAS.SetSaveWithScene(False)
+
+    p43ToRASPath = os.path.join(samplePath, "P43ToRAS.h5")
+    p43ToRAS = slicer.util.loadTransform(p43ToRASPath)
+    parameterNode.SetNodeReferenceID(self.P43_TO_RAS, p43ToRAS.GetID())
+    p43ToRAS.SetSaveWithScene(False)
+
+    p23Path = os.path.join(samplePath, "P23_Reconstructed.stl")
+    p23Model = slicer.util.loadModel(p23Path)
+    p23Model.SetName(self.P23_MODEL)
+    parameterNode.SetNodeReferenceID(self.P23_MODEL, p23Model.GetID())
+
+    p32Path = os.path.join(samplePath, "P32_Reconstructed.stl")
+    p32Model = slicer.util.loadModel(p32Path)
+    p32Model.SetName(self.P32_MODEL)
+    parameterNode.SetNodeReferenceID(self.P32_MODEL, p32Model.GetID())
+    p32Model.SetAndObserveTransformNodeID(p32ToRAS.GetID())
+
+    p43Path = os.path.join(samplePath, "P43_Reconstructed.stl")
+    p43Model = slicer.util.loadModel(p43Path)
+    p43Model.SetName(self.P43_MODEL)
+    parameterNode.SetNodeReferenceID(self.P43_MODEL, p43Model.GetID())
+    p43Model.SetAndObserveTransformNodeID(p43ToRAS.GetID())
+
+  def removeExamples(self):
+    parameterNode = self.getParameterNode()
+    moduleDir = os.path.dirname(slicer.modules.trackedtrussim.path)
+
+    p23Model = parameterNode.GetNodeReference(self.P23_MODEL)
+    p32Model = parameterNode.GetNodeReference(self.P32_MODEL)
+    p43Model = parameterNode.GetNodeReference(self.P43_MODEL)
+    p32ToRAS = parameterNode.GetNodeReference(self.P32_TO_RAS)
+    p43ToRAS = parameterNode.GetNodeReference(self.P43_TO_RAS)
+    slicer.mrmlScene.RemoveNode(p23Model)
+    slicer.mrmlScene.RemoveNode(p32Model)
+    slicer.mrmlScene.RemoveNode(p43Model)
+    slicer.mrmlScene.RemoveNode(p32ToRAS)
+    slicer.mrmlScene.RemoveNode(p43ToRAS)
 
   def setupPractice(self):
 
