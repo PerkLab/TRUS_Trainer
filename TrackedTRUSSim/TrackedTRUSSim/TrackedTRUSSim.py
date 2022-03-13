@@ -209,6 +209,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.cleanupPracticeItems()
     self.resetUserTesting()
     self.logic.removeProstateModel()
+    self.confirmTrialSelections()
 
   def onResetContours(self, practice=False):
     self.numContours = 0
@@ -272,6 +273,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.numContours = 0
 
+
   def resetUserTesting(self):
     print("Current trial name: " + self.currentTrialName)
     #Start by removing all trial specific info. Goal is to switch to trial number None
@@ -332,11 +334,11 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.ui.infoLabel.setText("")
 
-    participant = self.ui.participantComboBox.currentText
+    # participant = self.ui.participantComboBox.currentText
     ptVolume = self.ui.patientComboBox.currentText
     trialNumber = self.ui.trialComboBox.currentText
 
-    if participant != "None" and ptVolume != "None" and trialNumber != "None":
+    if ptVolume != "None" and trialNumber != "None":
       # self.ui.startTrialButton.enabled = True
       # self.ui.endTrialButton.enabled = False
       # self.ui.captureContourButton.enabled = False
@@ -345,7 +347,13 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       potentialTrialName = self.ui.participantComboBox.currentText + "_" + self.ui.patientComboBox.currentText + "_Trial_" + self.ui.trialComboBox.currentText
       potentialOutputPath = os.path.join(self.moduleDirPath, "TrialResults", potentialTrialName)
       if os.path.exists(potentialOutputPath):
-        self.ui.infoLabel.setText("NOTE: This trial has already been completed!")
+        self.ui.infoLabel.setText("This trial is already complete!")
+        self.ui.startTrialButton.enabled = False
+      else:
+        self.ui.startTrialButton.enabled = True
+
+    else:
+      self.ui.startTrialButton.enabled = False
     #
     #
     # else:
@@ -720,7 +728,6 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     self.reslicedNode.SetAndObserveTransformNodeID(self.ijktoRasTransform.GetID())
     self.prostateSeg.SetAndObserveTransformNodeID(self.shiftTransform.GetID())
 
-
   def dice_coef_loss(self, y_true, y_pred):
     return -dice_coef(y_true, y_pred)
 
@@ -791,6 +798,13 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
 
     #Parameter node
     parameterNode = slicer.mrmlScene.GetSingletonNode(self.moduleName, "vtkMRMLScriptedModuleNode")
+
+    #Store the fiducials as class attributes to speed up callback ****
+    self.anchorFids = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLMarkupsFiducialNode', 'Anchor_Fids').GetItemAsObject(0)
+    self.mobileFids = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLMarkupsFiducialNode', 'Mobile_Fids').GetItemAsObject(0)
+    self.probeTipFids = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLMarkupsFiducialNode', 'Anchor_Fids').GetItemAsObject(0)
+    self.numFids = self.anchorFids.GetNumberOfFiducials()
+    # ********
 
     # Start by hiding intersecting volumes and slice view annotations
     # Disable slice annotations immediately
@@ -874,6 +888,7 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     imageDataBackground = imageResliceBackground.GetOutputDataObject(0)
     self.npImageBackground = vtk.util.numpy_support.vtk_to_numpy(imageDataBackground.GetPointData().GetScalars())
 
+
   # Redefine createParameterNode method.
   # This method is used to create a parameter node that will not be saved with the scene, and will
   # contain models / data that is shared across all cases within our module.
@@ -912,6 +927,15 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     #Write this image data to the volume node
     ultrasoundSimVolume = parameterNode.GetNodeReference(self.ULTRASOUND_SIM_VOLUME)
     ultrasoundSimVolume.SetAndObserveImageData(sliceImageData)
+
+    #Determine whether the tip of the probe is within a set distance of the volume
+    probeTipPosition = [0,0,0]
+    centerOfBorePosition = [0,0,0]
+    self.probeTipFids.GetNthControlPointPositionWorld(0, probeTipPosition)
+    self.anchorFids.GetNthControlPointPositionWorld(self.numFids-1, centerOfBorePosition)
+    euclidDist = np.linalg.norm(np.array(probeTipPosition)-np.array(centerOfBorePosition))
+    print("euclid dist: " + str(euclidDist))
+
 
     '''
 import numpy as np
@@ -1657,7 +1681,7 @@ self.getSeg(imageData)
     trusVolume = caseNode.GetNodeReference(self.TRUS_VOLUME)
     if trusVolume != None:
       slicer.mrmlScene.RemoveNode(trusVolume)
-    trusPath = os.path.join(moduleDir, "Resources", "registered_zones", "Patient_2", "TRUS.nrrd")
+    trusPath = os.path.join(moduleDir, "Resources", "registered_zones", "Patient_11", "TRUS.nrrd")
     trusVolume = slicer.util.loadVolume(trusPath)
     trusVolume.SetName(self.TRUS_VOLUME)
     caseNode.SetNodeReferenceID(self.TRUS_VOLUME, trusVolume.GetID())
@@ -1665,7 +1689,7 @@ self.getSeg(imageData)
     #Replace phantomToRAS with the one for this practice trial
     phantomToRAS = parameterNode.GetNodeReference(self.PHANTOM_TO_RAS)
     slicer.mrmlScene.RemoveNode(phantomToRAS)
-    phantomToRASPath = os.path.join(moduleDir, "Resources", "registered_zones", "Patient_2", "PhantomToRAS.h5")
+    phantomToRASPath = os.path.join(moduleDir, "Resources", "registered_zones", "Patient_11", "PhantomToRAS.h5")
     phantomToRAS = slicer.util.loadTransform(phantomToRASPath)
     parameterNode.SetNodeReferenceID(self.PHANTOM_TO_RAS, phantomToRAS.GetID())
     phantomToRAS.SetSaveWithScene(False)
