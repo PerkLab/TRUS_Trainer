@@ -15,6 +15,7 @@ from skimage.transform import resize
 from skimage.util import img_as_float
 import open3d as o3d
 import time
+import csv
 
 #
 # TrackedTRUSSim
@@ -132,8 +133,6 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.startReconstructionButton.connect('clicked(bool)', self.onStartReconstruction)
     self.ui.stopReconstructionButton.connect('clicked(bool)', self.onStopReconstruction)
 
-    self.ui.patientComboBox.currentIndexChanged.connect(self.onPatientComboBoxChanged)
-    self.ui.trialComboBox.currentIndexChanged.connect(self.onTrialComboBoxChanged)
     self.ui.startTrialButton.connect('clicked(bool)', self.onStartTrial)
     self.ui.endTrialButton.connect('clicked(bool)', self.onEndTrial)
     self.ui.captureContourButton.connect('clicked(bool)', self.onCaptureContour)
@@ -142,9 +141,10 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.practiceCompleteButton.connect('clicked(bool)', self.onPracticeComplete)
     self.ui.generateModelButton.connect('clicked(bool)', self.onGenerateModel)
     self.ui.generateModelPracticeButton.connect('clicked(bool)', self.onGenerateModel)
-    self.ui.captureContourPracticeButton.connect('clicked(bool)', self.onCaptureContour)
+    self.ui.captureContourPracticeButton.connect('clicked(bool)', self.onCaptureContourPractice)
     self.ui.resetContoursButton.connect('clicked(bool)', self.onResetContours)
     self.ui.beginPracticeButton.connect('clicked(bool)', self.onBeginPractice)
+    self.ui.submitSurveyButton.connect('clicked(bool)', self.onSubmitSurvey)
 
     self.eventFilter = MainWidgetEventFilter(self)
     slicer.util.mainWindow().installEventFilter(self.eventFilter)
@@ -164,6 +164,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #Create a flag to indicate whether reconstruction is ongoing
     self.reconstructionFlag = False
     self.numContours = 0
+    self.currentTrialName = "None"
 
     #Start by hiding all the panels except for the first one
     self.ui.idGroupBox.show()
@@ -172,6 +173,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.trialInfoGroupBox.hide()
     self.ui.performTrialGroupBox.hide()
     self.ui.surveyGroupBox.hide()
+    self.ui.thankYouGroupBox.hide()
 
   def onGenerateModelPractice(self):
 
@@ -196,7 +198,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.startPractice()
 
   def onSelectParticipant(self):
-    self.participant = self.ui.participantComboBox.currentText
+    self.participant = int(self.ui.participantComboBox.currentText)
     self.ui.idGroupBox.hide()
     self.ui.exampleGroupBox.show()
     self.logic.loadExamples()
@@ -207,7 +209,6 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.logic.startReconstruction()
     self.reconstructionFlag = True
-    self.numContours = 0
 
     self.currentTrialName = "Practice"
     f = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.currentTrialName)
@@ -216,12 +217,14 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def onPracticeComplete(self):
     self.practiceLength = time.time() - self.practiceStarted
-    self.ui.practiceGroupBox.hide()
-    self.ui.trialInfoGroupBox.show()
     self.logic.cleanupPracticeItems()
     self.resetUserTesting()
     self.logic.removeProstateModel()
-    self.confirmTrialSelections()
+    self.numContours = 0
+    self.generateSessionSchedule()
+    self.setupTrial()
+    self.ui.practiceGroupBox.hide()
+    self.ui.trialInfoGroupBox.show()
 
   def onResetContours(self, practice=False):
     self.numContours = 0
@@ -233,21 +236,32 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #Also remove the model and meshToRAS transform to fully reset
     self.logic.removeProstateModel()
 
-  def onPatientComboBoxChanged(self):
+  def generateSessionSchedule(self):
+    ptOrder = [(self.participant)%3+1, (self.participant+1)%3+1, (self.participant+2)%3+1]
+    self.sessionSchedule = [[pt,trial] for pt in ptOrder for trial in [1,2,3]]
 
-    # get current case, recognizing that the cases that we use start from 8 onward
-    case = self.ui.patientComboBox.currentIndex + 7
+  def setupTrial(self):
+    #Grab the next patient and trial in the session
+    if len(self.sessionSchedule) != 0:
+      patientNum, trialNum = self.sessionSchedule.pop(0)
+      if trialNum == 1:
+        print(str(patientNum + 7))
+        self.logic.setupCase(patientNum + 7) #We are using patients 8, 9, 10, but still want to index from 1 for clarity
+      self.ui.patientVolumeLabel.setText("Volume_" + str(patientNum))
+      self.ui.trialNumberLabel.setText("Trial_" + str(trialNum))
+      return True
+    else:
+      return False
 
-    # print("case being loaded: " + str(case))
-
-    # load the appropriate transforms
-    self.logic.setupCase(case)
-
-    self.confirmTrialSelections()
-
-  def onTrialComboBoxChanged(self):
-    self.confirmTrialSelections()
-
+  # def onPatientComboBoxChanged(self):
+  #
+  #   # get current case, recognizing that the cases that we use start from 8 onward
+  #   case = self.ui.patientComboBox.currentIndex + 7
+  #
+  #   # print("case being loaded: " + str(case))
+  #
+  #   # load the appropriate transforms
+  #   self.logic.setupCase(case)
 
   def onStartTrial(self):
 
@@ -255,7 +269,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.trialStartTime = time.time()
     self.trialLength = 0
     self.numContours = 0
-    self.currentTrialName = self.ui.participantComboBox.currentText + "_" + self.ui.patientComboBox.currentText + "_Trial_" + self.ui.trialComboBox.currentText
+    self.currentTrialName = str(self.participant) + "_" + self.ui.patientVolumeLabel.text + "_" + self.ui.trialNumberLabel.text
 
     fid_name = self.currentTrialName
     # print("Name: " + fid_name)
@@ -270,21 +284,22 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.shortcutContour.setKey(qt.QKeySequence("Space"))
     self.shortcutContour.connect('activated()', self.onCaptureContour)
 
-
   def onEndTrial(self):
 
     self.trialLength = time.time() - self.trialStartTime
 
     self.saveTrialDetails()
     self.resetUserTesting()
-    self.confirmTrialSelections()
     self.logic.removeProstateModel()
-
-    self.ui.trialInfoGroupBox.show()
-    self.ui.performTrialGroupBox.hide()
-
     self.numContours = 0
 
+    moreTrials = self.setupTrial()
+
+    if moreTrials:
+      self.ui.trialInfoGroupBox.show()
+      self.ui.performTrialGroupBox.hide()
+    else:
+      self.startSurvey()
 
   def resetUserTesting(self):
     print("Current trial name: " + self.currentTrialName)
@@ -294,13 +309,38 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     prostate = slicer.mrmlScene.GetNodesByClassByName("vtkMRMLModelNode", "Prostate").GetItemAsObject(0)
     slicer.mrmlScene.RemoveNode(prostate)
 
-    #Change the index of trial number to None
-    self.ui.trialComboBox.setCurrentIndex(0)
+  def startSurvey(self):
+    self.logic.hideModels()
+    recontructionSliceNode = slicer.app.layoutManager().sliceWidget("US_Sim").mrmlSliceNode()
+    recontructionSliceNode.SetSliceVisible(False)
+    self.ui.performTrialGroupBox.hide()
+    self.ui.surveyGroupBox.show()
+
+  def onSubmitSurvey(self):
+    #Start by populating a new row as a list
+    newRow = []
+    newRow.append(str(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
+    newRow.append(str(self.participant))
+    newRow.append(str(self.ui.question1Slider.value))
+    newRow.append(str(self.ui.question2Slider.value))
+    newRow.append(str(self.ui.question3Slider.value))
+    newRow.append(str(self.ui.question4Slider.value))
+    newRow.append(str(self.ui.question5Slider.value))
+    newRow.append(str(self.ui.question6Slider.value))
+
+    csvPath = os.path.join(self.moduleDirPath, "TrialResults", "SurveyResponses.csv")
+
+    with open(csvPath,'a', newline='') as fd:
+      writer = csv.writer(fd)
+      writer.writerow(newRow)
+
+    self.ui.surveyGroupBox.hide()
+    self.ui.thankYouGroupBox.show()
 
 
   def saveTrialDetails(self):
 
-    outputPath = os.path.join(self.moduleDirPath, "TrialResults", self.currentTrialName)
+    outputPath = os.path.join(self.moduleDirPath, "TrialResults", str(self.participant), self.currentTrialName)
 
     if not os.path.exists(outputPath):
       os.makedirs(outputPath)
@@ -324,54 +364,54 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     logPath = os.path.join(outputPath, "log.txt")
     logFile = open(logPath,"w+")
     logFile.write("--- Prostate Reconstruction Log File ---\r\n")
-    logFile.write("Participant:        " + self.ui.participantComboBox.currentText + "\n")
-    logFile.write("Patient Volume:     " + self.ui.patientComboBox.currentText + "\n")
-    logFile.write("Trial Number:       " + self.ui.trialComboBox.currentText + "\n\n")
+    logFile.write("Participant:        " + str(self.participant) + "\n")
+    logFile.write("Patient Volume:     " + self.ui.patientVolumeLabel.text + "\n")
+    logFile.write("Trial Number:       " + self.ui.trialNumberLabel.text + "\n\n")
     logFile.write("Time of Completion: " + str(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())) + "\n")
     logFile.write("Duration of Trial:  " + str(round(self.trialLength,1)) + " seconds \n")
     logFile.write("Number of Contours: " + str(self.numContours) + "\n")
     logFile.close()
 
-
   def onCaptureContour(self):
-
-    print("CaptureContour Activated")
-
     self.logic.captureContour()
     self.numContours = self.numContours + 1
     self.ui.numContoursLabel.setText("Number of contours: " + str(self.numContours))
 
-  #This section handles disabling / enabling buttons / comboboxs based on what is selected
-  def confirmTrialSelections(self):
+  def onCaptureContourPractice(self):
+    self.logic.captureContour()
+    self.numContours = self.numContours + 1
+    self.ui.numContoursPracticeLabel.setText("Number of contours: " + str(self.numContours))
 
-    self.ui.infoLabel.setText("")
-
-    # participant = self.ui.participantComboBox.currentText
-    ptVolume = self.ui.patientComboBox.currentText
-    trialNumber = self.ui.trialComboBox.currentText
-
-    if ptVolume != "None" and trialNumber != "None":
-      # self.ui.startTrialButton.enabled = True
-      # self.ui.endTrialButton.enabled = False
-      # self.ui.captureContourButton.enabled = False
-
-      #Check whether this trial has been performed already by checking if the directory exists
-      potentialTrialName = self.ui.participantComboBox.currentText + "_" + self.ui.patientComboBox.currentText + "_Trial_" + self.ui.trialComboBox.currentText
-      potentialOutputPath = os.path.join(self.moduleDirPath, "TrialResults", potentialTrialName)
-      if os.path.exists(potentialOutputPath):
-        self.ui.infoLabel.setText("This trial is already complete!")
-        self.ui.startTrialButton.enabled = False
-      else:
-        self.ui.startTrialButton.enabled = True
-
-    else:
-      self.ui.startTrialButton.enabled = False
-    #
-    #
-    # else:
-    #   # self.ui.startTrialButton.enabled = False
-    #   # self.ui.endTrialButton.enabled = False
-    #   # self.ui.captureContourButton.enabled = False
+  # #This section handles disabling / enabling buttons / comboboxs based on what is selected
+  # def confirmTrialSelections(self):
+  #
+  #   self.ui.infoLabel.setText("")
+  #
+  #   ptVolume = self.ui.patientComboBox.currentText
+  #   trialNumber = self.ui.trialComboBox.currentText
+  #
+  #   if ptVolume != "None" and trialNumber != "None":
+  #     # self.ui.startTrialButton.enabled = True
+  #     # self.ui.endTrialButton.enabled = False
+  #     # self.ui.captureContourButton.enabled = False
+  #
+  #     #Check whether this trial has been performed already by checking if the directory exists
+  #     potentialTrialName = self.ui.participantComboBox.currentText + "_" + self.ui.patientComboBox.currentText + "_Trial_" + self.ui.trialComboBox.currentText
+  #     potentialOutputPath = os.path.join(self.moduleDirPath, "TrialResults", potentialTrialName)
+  #     if os.path.exists(potentialOutputPath):
+  #       self.ui.infoLabel.setText("This trial is already complete!")
+  #       self.ui.startTrialButton.enabled = False
+  #     else:
+  #       self.ui.startTrialButton.enabled = True
+  #
+  #   else:
+  #     self.ui.startTrialButton.enabled = False
+  #   #
+  #   #
+  #   # else:
+  #   #   # self.ui.startTrialButton.enabled = False
+  #   #   # self.ui.endTrialButton.enabled = False
+  #   #   # self.ui.captureContourButton.enabled = False
 
 
 
@@ -1097,7 +1137,6 @@ self.getSeg(imageData)
       parameterNode.SetNodeReferenceID(self.MESH_MODEL, meshModel.GetID())
       meshModel.SetAndObserveTransformNodeID(meshToRAS.GetID())
 
-
   def removeProstateModel(self):
 
     parameterNode = self.getParameterNode()
@@ -1264,35 +1303,35 @@ self.getSeg(imageData)
     layoutManager.setLayout(customLayoutId)
 
 
-  def maskSlice(self):
-
-    #Use screencap module logic to get slice view
-    screenCapLogic = ScreenCapture.ScreenCaptureLogic()
-    view = screenCapLogic.viewFromNode(slicer.util.getNode('vtkMRMLSliceNodeRed'))
-    view.forceRender()
-
-    #Apply vtkWindowToImageFilter
-    rw = view.renderWindow()
-    wti = vtk.vtkWindowToImageFilter()
-
-    wti.SetInput(rw)
-    wti.Update()
-
-    capturedImage = wti.GetOutput()
-    cols, rows, _ = capturedImage.GetDimensions()
-    # print("columns: " + str(cols))
-    # print("rows: " + str(rows))
-    sc = capturedImage.GetPointData().GetScalars()
-    npImage = vtk_to_numpy(sc)
-    npImage = npImage.reshape(rows, cols, -1)
-    npImage = np.flipud(npImage)
-
-    cv2.imshow("MASK", mask_int)
-    cv2.imwrite("C:\\repos\\TRUS_Trainer\\TrackedTRUSSim\\TrackedTRUSSim\\Resources\\Utils\\US_Mask.png", mask)
-
-    npImage[~mask] = [0,0,0]
-
-    cv2.imshow("TEST", npImage)
+  # def maskSlice(self):
+  #
+  #   #Use screencap module logic to get slice view
+  #   screenCapLogic = ScreenCapture.ScreenCaptureLogic()
+  #   view = screenCapLogic.viewFromNode(slicer.util.getNode('vtkMRMLSliceNodeRed'))
+  #   view.forceRender()
+  #
+  #   #Apply vtkWindowToImageFilter
+  #   rw = view.renderWindow()
+  #   wti = vtk.vtkWindowToImageFilter()
+  #
+  #   wti.SetInput(rw)
+  #   wti.Update()
+  #
+  #   capturedImage = wti.GetOutput()
+  #   cols, rows, _ = capturedImage.GetDimensions()
+  #   # print("columns: " + str(cols))
+  #   # print("rows: " + str(rows))
+  #   sc = capturedImage.GetPointData().GetScalars()
+  #   npImage = vtk_to_numpy(sc)
+  #   npImage = npImage.reshape(rows, cols, -1)
+  #   npImage = np.flipud(npImage)
+  #
+  #   cv2.imshow("MASK", mask_int)
+  #   cv2.imwrite("C:\\repos\\TRUS_Trainer\\TrackedTRUSSim\\TrackedTRUSSim\\Resources\\Utils\\US_Mask.png", mask)
+  #
+  #   npImage[~mask] = [0,0,0]
+  #
+  #   cv2.imshow("TEST", npImage)
 
 
   def moveBiopsy(self, biopsyDepth):
