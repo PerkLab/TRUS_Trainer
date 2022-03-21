@@ -219,13 +219,14 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # load the appropriate transforms
     self.logic.setupPractice()
 
-    self.logic.startReconstruction()
-    self.reconstructionFlag = True
-
     self.currentTrialName = "Practice"
     f = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.currentTrialName)
     f.GetDisplayNode().PointLabelsVisibilityOff()
     self.numContours = 0
+
+    self.logic.startReconstruction()
+    self.reconstructionFlag = True
+
 
   def onPracticeComplete(self):
     self.practiceLength = time.time() - self.practiceStarted
@@ -731,7 +732,6 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   ZONE_SEGMENTATION = "ZoneSegmentation"
   BIOPSY_MODEL = "BiopsyModel"
   BIOPSY_TRAJECTORY_MODEL = "BiopsyTrajectoryModel"
-  GT_MODEL = "GTPracticeModel"
 
   #Volume names
   MASK_VOLUME = "MaskVolume"
@@ -746,10 +746,10 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   BIOPSY_TRANSFORM_ROLES = "BiopsyTransformRoles"
   ULTRASOUND_SIM_VOLUME = "UltrasoundSimVolume"
   PROSTATE_CAPSULE_MODEL = "ProstateCapsuleModel"
-
-  TRAININGMODEL_TO_RAS = "TrainingModelToRAS"
   MESH_MODEL = "MeshModel"
   MESH_TO_RAS = "MeshToRAS"
+  GT_MODEL = "GTPracticeModel"
+  GT_MODEL_TO_RAS = "GTModelToRAS"
 
   # #Example volumes / transforms
   # P23_MODEL = "P23_Model"
@@ -757,7 +757,6 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
   # P43_MODEL = "P43_Model"
   # P32_TO_RAS = "P32ToRAS"
   # P43_TO_RAS = "P43ToRAS"
-
 
 
   def __init__(self):
@@ -1815,6 +1814,9 @@ self.getSeg(imageData)
     caseNode.SetNodeReferenceID(self.GT_MODEL, gtModel.GetID())
     gtDisplayNode = gtModel.GetDisplayNode()
     gtDisplayNode.SliceIntersectionVisibilityOn()
+    gtDisplayNode.VisibilityOff()
+
+    #Load the transform between the groundtruth model a
 
     #Replace phantomToRAS with the one for this practice trial
     phantomToRAS = parameterNode.GetNodeReference(self.PHANTOM_TO_RAS)
@@ -1904,6 +1906,17 @@ self.getSeg(imageData)
     prostate = slicer.mrmlScene.GetNodesByClassByName("vtkMRMLModelNode", "Prostate").GetItemAsObject(0)
     if prostate is not None:
       slicer.mrmlScene.RemoveNode(prostate)
+
+  def changeGTVis(self, state):
+
+    caseNode = self.getCaseNode()
+    gtPracticeModel = caseNode.GetNodeReference(self.GT_MODEL)
+    gtPracticeDisplayNode = gtPracticeModel.GetDisplayNode()
+    if state:
+      gtPracticeDisplayNode.VisibilityOn()
+    else:
+      gtPracticeDisplayNode.VisibilityOff()
+
 
   def setupCase(self, case):
 
