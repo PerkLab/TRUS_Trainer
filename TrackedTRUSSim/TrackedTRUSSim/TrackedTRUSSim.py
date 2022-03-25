@@ -293,7 +293,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.trialStartTime = time.time()
     self.trialLength = 0
     self.numContours = 0
-    self.currentTrialName = str(self.participant) + "_" + self.ui.patientVolumeLabel.text + "_" + self.ui.trialNumberLabel.text
+    self.currentTrialName = str(self.participant) + "_" + self.ui.patientVolumeLabel.text + "_Trial_" + self.ui.trialNumberLabel.text[-1]
 
     fid_name = self.currentTrialName
     # print("Name: " + fid_name)

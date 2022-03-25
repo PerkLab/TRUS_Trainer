@@ -1,0 +1,71 @@
+
+#Generate Label map 
+Im = getNode('scan')
+A = arrayFromVolume(Im)
+
+seg = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSegmentationNode')
+segLog = slicer.modules.segmentations.logic()
+seg.SetReferenceImageGeometryParameterFromVolumeNode(Im)
+segLog.ImportModelToSegmentationNode(model,seg)
+seg.SetReferenceImageGeometryParameterFromVolumeNode(Im)
+LM = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLabelMapVolumeNode')
+segLog.ExportVisibleSegmentsToLabelmapNode(seg,LM,Im)
+Predict = slicer.util.arrayFromVolume(LM)
+Predict.shape #should be same as A.shape 
+
+#Metrics 
+GT = manually segmented LM from ^ 
+Predict = code generated LM 
+
+true_pos = np.logical_and(GT==1,Predict==1)
+true_neg = np.logical_and(GT==0,Predict==0)
+false_pos = np.logical_and(GT==1,Predict==0)
+false_neg = np.logical_and(GT==0,Predict==1)
+
+recall = true_pos / (true_pos + false_neg)
+specificity = true_neg / (true_neg + false_pos)
+precision = true_pos / (true_pos + false_pos)
+
+
+intersection = np.logical_and(GT,Predict)
+
+
+dice_score = 2.*intersection.sum()/(GT.sum()+Predict.sum())
+
+#Set Window Level 
+imNode.GetDisplayNode().SetAutoWindowLevel(0)
+imsNode.GetDisplayNode().SetWindowLevelMinMax(100,256)
+
+#undo redo 
+#When you add the points from the model to the fiducial node make a fiducial Stack
+#something like this might take some reworking 
+fidList = [] 
+for i in range(0, pts.GetNumberOfPoints()):
+  fidList.append([pts.GetPoint[i]])
+
+
+if self.dataStack is None: 
+  self.dataStack = [[FidList]]
+else: 
+  self.dataStack.append([FidList])
+
+# on Undo 
+
+#populate data to remove 
+if self.redoStack is None: 
+  self.redoStack = [self.dataStack[-1]] 
+else: 
+  self.redoStack.append(self.dataStack[-1])
+
+#remove data 
+self.dataStack.pop(-1)
+
+fidNode.RemoveAllMarkups() 
+#add fiducials back in from dataStack in nested loop 
+
+#onRedo 
+if self.redoStack is not None:
+  self.dataStack.append(self.redoStack[-1])
+else: 
+  print('There is nothing to redo')
+self.redoStack.pop(-1)
