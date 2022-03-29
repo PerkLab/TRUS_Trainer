@@ -9,6 +9,7 @@
       Type="OptiTrack"
       ToolReferenceFrame="Tracker" 
       Profile="TRUS_Probe_Profile.motive"
+      ProjectFile="TRUS_Probe_Profile.motive"
       AttachToRunningMotive="FALSE"
       MotiveDataDescriptionsUpdateTimeSec="1.0" >
       <DataSources>
@@ -49,8 +50,7 @@
       <TransformNames>
         <Transform Name="ProbeToPhantom" />
         <Transform Name="PointerToPhantom" />
-        <Transform Name="PointerToProbe" />
-		<Transform Name="PointerToProbe" />
+        <Transform Name="PointerToPhantom" />
       </TransformNames>
     </DefaultClientInfo>
   </PlusOpenIGTLinkServer>

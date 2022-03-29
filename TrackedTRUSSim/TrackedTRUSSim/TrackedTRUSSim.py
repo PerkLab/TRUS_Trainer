@@ -96,7 +96,9 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     Called when the user opens the module the first time and the widget is initialized.
     """
     ScriptedLoadableModuleWidget.__init__(self, parent)
-
+    slicer.mymod=self 
+    self.isGeneratedPractice = False 
+    self.isGenerated = False
 
   def setup(self):
     """
@@ -141,7 +143,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.selectParticipantButton.connect('clicked(bool)', self.onSelectParticipant)
     self.ui.practiceCompleteButton.connect('clicked(bool)', self.onPracticeComplete)
     self.ui.generateModelButton.connect('clicked(bool)', self.onGenerateModel)
-    self.ui.generateModelPracticeButton.connect('clicked(bool)', self.onGenerateModel)
+    self.ui.generateModelPracticeButton.connect('clicked(bool)', self.onGenerateModelPractice)
     self.ui.captureContourPracticeButton.connect('clicked(bool)', self.onCaptureContour)
     self.ui.resetContoursButton.connect('clicked(bool)', self.onResetContours)
     self.ui.submitSurveyButton.connect('clicked(bool)', self.onSubmitSurvey)
@@ -189,14 +191,18 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if self.numContours < 3:
       self.ui.modelWarningPracticeLabel.setText("Not enough contours: Minimum 3 required.")
     else:
+      self.ui.modelWarningPracticeLabel.setText("")
       self.logic.modelToSTL()
+      self.isGeneratedPractice = True 
 
   def onGenerateModel(self):
 
     if self.numContours < 3:
       self.ui.modelWarningLabel.setText("Not enough contours: Minimum 3 required.")
     else:
+      self.ui.modelWarningLabel.setText("")
       self.logic.modelToSTL()
+      self.isGenerated = True 
 
   def onBeginPractice(self):
     self.logic.showModels()
@@ -221,8 +227,9 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.logic.setupPractice()
 
     self.currentTrialName = "Practice"
-    f = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.currentTrialName)
+    f = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.currentTrialName) #CHANGE THIS
     f.GetDisplayNode().PointLabelsVisibilityOff()
+    f.SetLocked(1)
     self.numContours = 0
 
     self.logic.startReconstruction()
@@ -239,13 +246,18 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.setupTrial()
     self.ui.practiceGroupBox.hide()
     self.ui.trialInfoGroupBox.show()
+    self.isGeneratedPractice = False
+    self.ui.numContoursPracticeLabel.setText("Number of contours: " + str(self.numContours)) 
+    self.ui.numContoursLabel.setText("Number of contours: " + str(self.numContours)) 
 
   def onResetContours(self, practice=False):
     self.numContours = 0
     self.resetUserTesting()
     self.currentTrialName = "Practice"
-    f = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.currentTrialName)
+    f = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", self.currentTrialName) #CHANGE THIS
     f.GetDisplayNode().PointLabelsVisibilityOff()
+    self.ui.numContoursPracticeLabel.setText("Number of contours: " + str(self.numContours)) 
+    self.ui.numContoursLabel.setText("Number of contours: " + str(self.numContours)) 
 
     #Also remove the model and meshToRAS transform to fully reset
     self.logic.removeProstateModel()
@@ -278,7 +290,6 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   #   self.logic.setupCase(case)
 
   def onStartTrial(self):
-
     #Initialize vars to record trial properties
     self.trialStartTime = time.time()
     self.trialLength = 0
@@ -289,6 +300,7 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # print("Name: " + fid_name)
     f = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", fid_name)
     f.GetDisplayNode().PointLabelsVisibilityOff()
+    f.SetLocked(1)
 
     #Reenable end trial / capture contour, disable start trial
     self.ui.trialInfoGroupBox.hide()
@@ -299,17 +311,18 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # self.shortcutContour.connect('activated()', self.onCaptureContour)
 
   def onEndTrial(self):
-
+    
     self.trialLength = time.time() - self.trialStartTime
 
     self.saveTrialDetails()
     self.resetUserTesting()
     self.logic.removeProstateModel()
     self.numContours = 0
-
+    self.isGenerated = False 
     moreTrials = self.setupTrial()
-
-    if moreTrials:
+    self.ui.numContoursLabel.setText("Number of contours: " + str(self.numContours))
+    
+    if moreTrials:  
       self.ui.trialInfoGroupBox.show()
       self.ui.performTrialGroupBox.hide()
     else:
@@ -404,15 +417,16 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       print("Scene saving failed")
 
   def onCaptureContour(self):
-    numFids = self.logic.captureContour()
-    if len(self.numPrevFids) == 0:
-      self.ui.undoContourButton.enabled = True
-      self.ui.undoContourPracticeButton.enabled = True
-    self.numPrevFids.append(numFids)
-    self.numContours = self.numContours + 1
-    self.ui.numContoursLabel.setText("Number of contours: " + str(self.numContours))
-    self.ui.numContoursPracticeLabel.setText("Number of contours: " + str(self.numContours))
-    print(self.numPrevFids)
+    if not (self.ui.practiceGroupBox.isHidden() and self.ui.performTrialGroupBox.isHidden()):
+      numFids = self.logic.captureContour()
+      if len(self.numPrevFids) == 0:
+        self.ui.undoContourButton.enabled = True
+        self.ui.undoContourPracticeButton.enabled = True
+      self.numPrevFids.append(numFids)
+      self.numContours = self.numContours + 1
+      self.ui.numContoursLabel.setText("Number of contours: " + str(self.numContours))
+      self.ui.numContoursPracticeLabel.setText("Number of contours: " + str(self.numContours))
+      print(self.numPrevFids)
 
 
   def onUndoContour(self):
@@ -420,6 +434,9 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     f = slicer.mrmlScene.GetNodesByClassByName("vtkMRMLMarkupsFiducialNode", self.currentTrialName).GetItemAsObject(0)
     numFidsTotal = f.GetNumberOfControlPoints()
     numFidsLastContour = self.numPrevFids.pop(-1)
+    self.numContours = self.numContours-1 
+    self.ui.numContoursLabel.setText("Number of contours: " + str(self.numContours))
+    self.ui.numContoursPracticeLabel.setText("Number of contours: " + str(self.numContours))
     print("numFidsLastContour: " + str(numFidsLastContour))
     for i in reversed(range(numFidsTotal - numFidsLastContour, numFidsTotal)):
       print("removing Fiducial " + str(i))
@@ -429,7 +446,10 @@ class TrackedTRUSSimWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if len(self.numPrevFids) == 0:
       self.ui.undoContourButton.enabled = False
       self.ui.undoContourPracticeButton.enabled = False
-
+    if self.isGeneratedPractice is True: 
+      self.onGenerateModelPractice()
+    if self.isGenerated is True: 
+      self.onGenerateModel()
 
   def placeIcons(self):
 
@@ -765,10 +785,10 @@ class TrackedTRUSSimLogic(ScriptedLoadableModuleLogic):
     Called when the logic class is instantiated. Can be used for initializing member variables.
     """
     ScriptedLoadableModuleLogic.__init__(self)
+    slicer.mymod = self
 
     self.caseLoaded = False
     self.currCaseNumber = -1
-    slicer.mymod = self
 
     self.smooth = 1
     self.path = os.path.dirname(os.path.abspath(__file__))
@@ -1364,7 +1384,7 @@ self.getSeg(imageData)
 
     #Load all previous biopsy names
     biopsyTransformRoles = []
-    if biopsyTransformRolesNode is not '':
+    if biopsyTransformRolesNode != '':
       biopsyTransformRoles = json.loads(biopsyTransformRolesNode)
 
     # print("biopsyTransformRoles: " + str(biopsyTransformRoles))
@@ -1439,7 +1459,7 @@ self.getSeg(imageData)
     # print(str(biopsyTransformRolesNode))
 
     #If there are no biopsy transforms exit the function
-    if biopsyTransformRolesNode is '':
+    if biopsyTransformRolesNode == '':
       return
 
     #Read the list of biopsy transform roles
@@ -1803,6 +1823,8 @@ self.getSeg(imageData)
     trusPath = os.path.join(moduleDir, "Resources", "registered_zones", "Patient_11", "TRUS.nrrd")
     trusVolume = slicer.util.loadVolume(trusPath)
     trusVolume.SetName(self.TRUS_VOLUME)
+    #trusVolume.GetDisplayNode().SetAutoWindowLevel(0)
+    #trusVolume.GetDisplayNode().SetWindowLevelMinMax(20,150)
     caseNode.SetNodeReferenceID(self.TRUS_VOLUME, trusVolume.GetID())
 
     #Load the relevant groundtruth model
@@ -1937,6 +1959,8 @@ self.getSeg(imageData)
     trusPath = os.path.join(moduleDir, "Resources", "registered_zones", "Patient_" + str(case), "TRUS.nrrd")
     trusVolume = slicer.util.loadVolume(trusPath)
     trusVolume.SetName(self.TRUS_VOLUME)
+    #trusVolume.GetDisplayNode().SetAutoWindowLevel(0)
+    #trusVolume.GetDisplayNode().SetWindowLevelMinMax(20,150)
     caseNode.SetNodeReferenceID(self.TRUS_VOLUME, trusVolume.GetID())
 
     #load zone segmentation
