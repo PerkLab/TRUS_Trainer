@@ -43,3 +43,4 @@ for participant in allFolders:
 
             fidsToSTL(fids, resultsPath)
 
+            
