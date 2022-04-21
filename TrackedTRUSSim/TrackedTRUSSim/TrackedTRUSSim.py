@@ -9,8 +9,8 @@ from vtk.util import numpy_support
 from pathlib import Path
 import ScreenCapture
 import cv2
-# import tensorflow.keras.models as M
-# import tensorflow.keras.backend as K
+import tensorflow.keras.models as M
+import tensorflow.keras.backend as K
 from skimage.transform import resize
 from skimage.util import img_as_float
 import open3d as o3d
@@ -2055,7 +2055,7 @@ self.getSeg(imageData)
     if plusServerLauncherNode.GetNodeReferenceID('plusServerRef') != plusServerNode.GetID():
       plusServerLauncherNode.AddAndObserveServerNode(plusServerNode)
 
-  def generateResults(self):
+  def generateResults(self, useM2Ms=False):
 
     participants = ["Colton"]
 
@@ -2064,7 +2064,7 @@ self.getSeg(imageData)
     contentsOfDir = os.listdir(resultsDir)
     resultsDF = pd.DataFrame(columns=['Participant', 'Volume', 'Trial', 'TruePositive', 'TrueNegative',
                                       'FalsePositive', 'FalseNegative', 'Recall', 'Specificity',
-                                      'Precision', 'DiceScore'])
+                                      'Precision', 'DiceScore', "Volume", "RelativeVolume", "SurfaceArea", "RelativeSurfaceArea"])
 
     allFolders = []
     for f in contentsOfDir:
@@ -2107,6 +2107,11 @@ self.getSeg(imageData)
 
         gtModelPath = groundtruthDir + "Patient_" + str(volume + 7) + "\\GroundtruthModel.stl"
 
+        if useM2Ms:
+          gtSurfaceArea, gtVolume = self.groundtruthStats(gtModelPath)
+        else:
+          gtSurfaceArea, gtVolume = self.groundtruthStats(gtModelPath)
+
         # Load in the current volume
         vol = allTrusNodes[i]
 
@@ -2115,14 +2120,25 @@ self.getSeg(imageData)
           resultsPath = os.path.join(resultsDir, str(participant), "{}_Volume_{}_Trial_{}".format(participant, volume, trial))
           fids = np.load(os.path.join(resultsPath, "fiducials.npy"))
           print(resultsPath)
-          self.fidsToSTL(fids, resultsPath)
+          if useM2Ms:
+            trialModelPath = resultsPath + "\\ProstateModel_M2M.stl"
+            if os.path.exists(trialModelPath):
+              trialSurfaceArea, trialVolume = self.fidsToSTL_MarkupsToModels(fids, resultsPath, returnStats=True)
+            else:
+              trialSurfaceArea, trialVolume = self.fidsToSTL_MarkupsToModels(fids, resultsPath, returnStats=True)
+          else:  
+            trialModelPath = resultsPath + "\\ProstateModel.stl"
+            if os.path.exists(trialModelPath):
+              trialSurfaceArea, trialVolume = self.groundtruthStats(trialModelPath)
+            else:
+              trialSurfaceArea, trialVolume = self.fidsToSTL(fids, resultsPath, returnStats=True)
 
           # Load the trial model and transform
-          trialModelPath = resultsPath + "\\ProstateModel.stl"
           trialModel = slicer.util.loadModel(trialModelPath)
           trialModel.SetName("TrialModel")
-          trialModel.SetAndObserveTransformNodeID(trialTransform.GetID())
-          trialModel.HardenTransform()
+          if not useM2Ms:
+            trialModel.SetAndObserveTransformNodeID(trialTransform.GetID())
+            trialModel.HardenTransform()
 
           gtModel = slicer.util.loadModel(gtModelPath)
           gtModel.SetName("GroundTruthModel")
@@ -2173,12 +2189,26 @@ self.getSeg(imageData)
 
           dice_score = 2. * intersection.sum() / (segGTArray.sum() + segTrialArray.sum())
 
+          relativeVolume = trialVolume/gtVolume
+          relativeSurfaceArea = trialSurfaceArea/gtSurfaceArea
+
           resultsRow = [participant, volume, trial, true_pos, true_neg, false_pos, false_neg,
-                        recall, specificity, precision, dice_score]
+                        recall, specificity, precision, dice_score, trialVolume, relativeVolume, trialSurfaceArea, relativeSurfaceArea]
 
           print(str(resultsRow))
 
           resultsDF.loc[0 if pd.isnull(resultsDF.index.max()) else resultsDF.index.max() + 1] = resultsRow
+
+          #Remove all nodes added
+          slicer.mrmlScene.RemoveNode(trialModel)
+          slicer.mrmlScene.RemoveNode(gtModel)
+          slicer.mrmlScene.RemoveNode(segTrial)
+          slicer.mrmlScene.RemoveNode(LabelMapTrial)
+          slicer.mrmlScene.RemoveNode(segGT)
+          slicer.mrmlScene.RemoveNode(LabelMapGT)
+
+      # input("participant "+ str(participant) + " completed.")
+
 
       i = i + 1
 
@@ -2190,15 +2220,49 @@ self.getSeg(imageData)
     slicer.mrmlScene.RemoveNode(trus3Volume)
     slicer.mrmlScene.RemoveNode(trialTransform)
 
-  def fidsToSTL(self, fids, outputPath, depth=5, width=5, showModel=True):
+  def fidsToSTL(self, fids, outputPath, depth=5, width=5, showModel=True, returnStats=False):
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(fids)
     pcd.estimate_normals()
     pcd.orient_normals_consistent_tangent_plane(100)
     poisson_mesh, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=depth, width=width)
-    o3d.visualization.draw_geometries([poisson_mesh])
+    # o3d.visualization.draw_geometries([poisson_mesh])
     poisson_mesh = o3d.geometry.TriangleMesh.compute_triangle_normals(poisson_mesh)
     o3d.io.write_triangle_mesh(outputPath + "\\ProstateModel.stl", poisson_mesh)
+
+    if returnStats:
+      if poisson_mesh.is_watertight():
+        return poisson_mesh.get_surface_area(), poisson_mesh.get_volume()
+      else:
+        return 0, 0
+
+  def fidsToSTL_MarkupsToModels(self, fids, outputPath, depth=5, width=5, showModel=True, returnStats=False):
+
+    f = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "Fiducials")
+    for pt in fids:
+      f.AddControlPointWorld(pt)
+
+    prostateModelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", "ProstateModel")
+    mtmlogic = slicer.modules.markupstomodel.logic()
+    mtmlogic.UpdateClosedSurfaceModel(f, prostateModelNode, True, True, 0.0, True)
+
+    prostateModelPath = os.path.join(outputPath, "ProstateModel_M2M.stl")
+    slicer.util.saveNode(prostateModelNode, prostateModelPath)
+
+    surfaceArea, volume = self.groundtruthStats(prostateModelPath)
+    return surfaceArea, volume
+
+  def groundtruthStats(self, stlPath):
+    mesh = o3d.io.read_triangle_mesh(stlPath)
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = mesh.vertices
+    pcd.estimate_normals()
+    pcd.orient_normals_consistent_tangent_plane(100)
+    gt_mesh, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=5, width=5)
+    if gt_mesh.is_watertight():
+      return gt_mesh.get_surface_area(), gt_mesh.get_volume()
+    else:
+      return 0, 0
 
 
 #
